@@ -13,13 +13,9 @@ import {
   History,
   AlertTriangle,
   Loader2,
+  Check,
 } from 'lucide-react';
-import {
-  fetchRequestActivityLogs,
-  fetchRequestAttachments,
-  reviewFormRequest,
-  type ReviewAction,
-} from '../lib/api';
+import type { ReviewAction } from '../lib/api';
 import {
   PAYMENT_METHOD_LABELS,
   REQUEST_TYPE_META,
@@ -28,9 +24,9 @@ import {
   formatPHP,
   getSubtypeLabel,
 } from '../lib/constants';
-import { useAuth } from '../contexts/AuthContext';
+import { useAppData } from '../contexts/DataContext';
 import { useToast } from '../contexts/ToastContext';
-import { RequestTypeBadge, StatusBadge, StepPill } from './StatusBadges';
+import { RequestTypeBadge, StatusBadge } from './StatusBadges';
 import { SignatureDisplay } from './SignaturePad';
 import type {
   FormRequest,
@@ -43,16 +39,14 @@ interface DigitalFormModalProps {
   request: FormRequest | null;
   portalContext: UserRole;
   onClose: () => void;
-  onUpdated: () => void;
 }
 
 export function DigitalFormModal({
   request,
   portalContext,
   onClose,
-  onUpdated,
 }: DigitalFormModalProps) {
-  const { profile } = useAuth();
+  const { activeProfile: profile, getAttachments, getActivityLogs, performReview } = useAppData();
   const { toast } = useToast();
   const [attachments, setAttachments] = useState<(RequestAttachment & { signedUrl?: string })[]>(
     []
@@ -68,19 +62,14 @@ export function DigitalFormModal({
     setRemarks('');
     setDisbursementRef(request.disbursement_reference ?? '');
     setLoadingDetails(true);
-    Promise.all([
-      fetchRequestAttachments(request.id),
-      fetchRequestActivityLogs(request.id),
-    ])
+    Promise.all([getAttachments(request.id), getActivityLogs(request.id)])
       .then(([att, act]) => {
         setAttachments(att);
         setLogs(act);
       })
-      .catch((err) => {
-        console.error(err);
-      })
+      .catch((err) => console.error(err))
       .finally(() => setLoadingDetails(false));
-  }, [request]);
+  }, [request, getAttachments, getActivityLogs]);
 
   if (!request) return null;
 
@@ -116,14 +105,16 @@ export function DigitalFormModal({
 
     setSubmitting(action);
     try {
-      await reviewFormRequest({
+      await performReview({
         requestId: request.id,
         action,
         remarks,
         disbursementReference: disbursementRef,
       });
-      toast('Digital form updated', `${request.reference_no} status has been recorded in real time.`);
-      onUpdated();
+      toast(
+        'Digital form updated',
+        `${request.reference_no} status and digital signature stamp have been recorded.`
+      );
       onClose();
     } catch (err) {
       toast(
@@ -145,12 +136,62 @@ export function DigitalFormModal({
           ? 'border-slate-400 text-slate-500 bg-slate-50'
           : 'border-amber-500 text-amber-800 bg-amber-50/80';
 
+  // Visual Workflow Pipeline Steps
+  const pipelineSteps = [
+    {
+      label: 'Submitted',
+      state: 'done' as const,
+      sub: formatDate(request.created_at),
+    },
+    ...(request.hr_status !== 'not_required'
+      ? [
+          {
+            label: 'HR Review',
+            state:
+              request.hr_status === 'approved' || request.hr_status === 'endorsed'
+                ? ('done' as const)
+                : request.hr_status === 'rejected'
+                  ? ('rejected' as const)
+                  : ('pending' as const),
+            sub: request.hr_status === 'pending' ? 'Awaiting HR' : request.hr_status,
+          },
+        ]
+      : []),
+    {
+      label: 'Boss Sign-Off',
+      state:
+        request.boss_status === 'approved'
+          ? ('done' as const)
+          : request.boss_status === 'rejected'
+            ? ('rejected' as const)
+            : ('pending' as const),
+      sub: request.boss_status === 'pending' ? 'Awaiting Boss' : request.boss_status,
+    },
+    ...(request.accounting_status !== 'not_required'
+      ? [
+          {
+            label: 'Accounting',
+            state:
+              request.accounting_status === 'paid' || request.accounting_status === 'verified'
+                ? ('done' as const)
+                : request.accounting_status === 'rejected'
+                  ? ('rejected' as const)
+                  : ('pending' as const),
+            sub:
+              request.accounting_status === 'pending'
+                ? 'Awaiting Finance'
+                : request.accounting_status,
+          },
+        ]
+      : []),
+  ];
+
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-900/60 p-3 backdrop-blur-xs sm:p-6">
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-900/65 p-3 backdrop-blur-xs sm:p-6">
       <div className="print-slip-container relative my-auto w-full max-w-4xl overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl">
         {/* Top Modal Utility Bar (Hidden on Print) */}
         <div className="no-print flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-slate-50 px-5 py-3.5">
-          <div className="flex items-center gap-2.5">
+          <div className="flex flex-wrap items-center gap-2">
             <span className="font-mono text-xs font-bold tracking-wider text-slate-600">
               {request.reference_no}
             </span>
@@ -189,7 +230,7 @@ export function DigitalFormModal({
           <div className="flex flex-col justify-between gap-4 border-b-2 border-slate-900 pb-5 sm:flex-row sm:items-center">
             <div className="flex items-center gap-3.5">
               <img
-                src="/brand/mediq-logo-dark.png"
+                src="./brand/mediq-logo-dark.png"
                 alt="MediQ Pharma"
                 className="h-10 w-auto object-contain"
               />
@@ -197,9 +238,7 @@ export function DigitalFormModal({
                 <p className="text-[11px] font-bold tracking-widest text-sky-700 uppercase">
                   Official Paperless Digital Form
                 </p>
-                <h2 className="text-lg font-extrabold text-slate-900 sm:text-xl">
-                  {meta.label}
-                </h2>
+                <h2 className="text-lg font-extrabold text-slate-900 sm:text-xl">{meta.label}</h2>
                 <p className="text-xs text-slate-500">
                   Form Code: <span className="font-mono font-semibold">{meta.formCode}</span> ·
                   Filed {formatDateTime(request.created_at)}
@@ -219,8 +258,50 @@ export function DigitalFormModal({
             </div>
           </div>
 
-          {/* Employee & Workflow Routing Summary */}
-          <div className="mt-5 grid grid-cols-1 gap-4 rounded-xl border border-slate-200 bg-slate-50/70 p-4 sm:grid-cols-2 lg:grid-cols-4">
+          {/* Visual Approval Progress Pipeline */}
+          <div className="no-print mt-5 rounded-xl border border-slate-200 bg-slate-50/70 px-4 py-3.5">
+            <div className="flex items-center justify-between gap-2">
+              {pipelineSteps.map((step, index) => (
+                <div key={step.label} className="flex flex-1 items-center">
+                  <div className="flex items-center gap-2.5">
+                    <div
+                      className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold ${
+                        step.state === 'done'
+                          ? 'bg-emerald-600 text-white shadow-xs'
+                          : step.state === 'rejected'
+                            ? 'bg-rose-600 text-white'
+                            : 'border-2 border-amber-400 bg-amber-50 text-amber-700'
+                      }`}
+                    >
+                      {step.state === 'done' ? (
+                        <Check className="h-3.5 w-3.5" />
+                      ) : step.state === 'rejected' ? (
+                        <X className="h-3.5 w-3.5" />
+                      ) : (
+                        index + 1
+                      )}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-xs font-bold text-slate-900">{step.label}</p>
+                      <p className="text-[10px] font-medium text-slate-500 capitalize">
+                        {step.sub}
+                      </p>
+                    </div>
+                  </div>
+                  {index < pipelineSteps.length - 1 && (
+                    <div
+                      className={`mx-3 hidden h-0.5 flex-1 rounded-full sm:block ${
+                        step.state === 'done' ? 'bg-emerald-500' : 'bg-slate-200'
+                      }`}
+                    />
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Employee Summary */}
+          <div className="mt-4 grid grid-cols-1 gap-4 rounded-xl border border-slate-200 bg-white p-4 sm:grid-cols-2 lg:grid-cols-4">
             <div>
               <p className="text-[11px] font-semibold tracking-wider text-slate-500 uppercase">
                 Employee Name
@@ -255,15 +336,11 @@ export function DigitalFormModal({
               <p className="mt-0.5 text-sm font-bold text-slate-900">
                 {getSubtypeLabel(request.request_type, request.subtype)}
               </p>
-              <div className="mt-1 flex flex-wrap gap-1">
-                <StepPill label="HR" state={request.hr_status} />
-                <StepPill label="Boss" state={request.boss_status} />
-                <StepPill label="Acct" state={request.accounting_status} />
-              </div>
+              <p className="text-xs text-slate-500">Priority: {request.priority.toUpperCase()}</p>
             </div>
           </div>
 
-          {/* Form Subject & Description */}
+          {/* Subject & Structured Details */}
           <div className="mt-5 space-y-4">
             <div>
               <p className="text-[11px] font-semibold tracking-wider text-slate-500 uppercase">
@@ -271,13 +348,12 @@ export function DigitalFormModal({
               </p>
               <h3 className="mt-0.5 text-base font-bold text-slate-900">{request.title}</h3>
               {request.description && (
-                <p className="mt-1.5 whitespace-pre-wrap rounded-lg border border-slate-100 bg-slate-50/50 p-3 text-sm leading-relaxed text-slate-700">
+                <p className="mt-1.5 whitespace-pre-wrap rounded-xl border border-slate-100 bg-slate-50/60 p-3.5 text-sm leading-relaxed text-slate-700">
                   {request.description}
                 </p>
               )}
             </div>
 
-            {/* Structured Form Fields Grid */}
             <div className="grid grid-cols-2 gap-3 rounded-xl border border-slate-200 p-4 sm:grid-cols-4">
               {request.start_date && (
                 <div>
@@ -439,7 +515,7 @@ export function DigitalFormModal({
               )}
             </div>
 
-            {/* Itemized Expense Breakdown Table (if Reimbursement / Cash Advance has items) */}
+            {/* Itemized Expense Breakdown Table */}
             {Array.isArray(request.metadata?.line_items) &&
               request.metadata.line_items.length > 0 && (
                 <div className="overflow-hidden rounded-xl border border-slate-200">
@@ -517,7 +593,7 @@ export function DigitalFormModal({
                             <img
                               src={att.signedUrl}
                               alt={att.file_name}
-                              className="h-full w-full object-cover"
+                              className="h-full w-full object-contain p-1"
                             />
                           </a>
                         ) : (
@@ -557,7 +633,6 @@ export function DigitalFormModal({
                 Official Digital Sign-Offs
               </p>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                {/* 1. Employee Signature */}
                 <div className="flex flex-col justify-between rounded-xl border border-slate-200 bg-white p-3.5 text-center">
                   <p className="text-[10px] font-bold tracking-wider text-slate-500 uppercase">
                     Requested By
@@ -574,11 +649,12 @@ export function DigitalFormModal({
                     <p className="text-xs font-bold text-slate-900">
                       {request.employee?.full_name}
                     </p>
-                    <p className="text-[11px] text-slate-500">{formatDateTime(request.created_at)}</p>
+                    <p className="text-[11px] text-slate-500">
+                      {formatDateTime(request.created_at)}
+                    </p>
                   </div>
                 </div>
 
-                {/* 2. HR Block */}
                 <div className="flex flex-col justify-between rounded-xl border border-slate-200 bg-white p-3.5 text-center">
                   <p className="text-[10px] font-bold tracking-wider text-violet-700 uppercase">
                     HR Review
@@ -612,7 +688,6 @@ export function DigitalFormModal({
                   </div>
                 </div>
 
-                {/* 3. Boss Block */}
                 <div className="flex flex-col justify-between rounded-xl border border-slate-200 bg-white p-3.5 text-center">
                   <p className="text-[10px] font-bold tracking-wider text-amber-700 uppercase">
                     Boss Executive Sign-Off
@@ -643,7 +718,6 @@ export function DigitalFormModal({
                   </div>
                 </div>
 
-                {/* 4. Accounting Block */}
                 <div className="flex flex-col justify-between rounded-xl border border-slate-200 bg-white p-3.5 text-center">
                   <p className="text-[10px] font-bold tracking-wider text-emerald-700 uppercase">
                     Accounting / Finance
@@ -682,7 +756,7 @@ export function DigitalFormModal({
             </div>
           </div>
 
-          {/* Interactive Role Action Panel (Hidden on Print) */}
+          {/* Interactive Role Action Panel */}
           {(canHrAct || canBossAct || canAccountingAct || (isOwner && isOpen)) && (
             <div className="no-print mt-6 rounded-xl border border-slate-200 bg-slate-50 p-4">
               <p className="text-xs font-bold tracking-wider text-slate-700 uppercase">
@@ -879,9 +953,7 @@ export function DigitalFormModal({
                         {formatDateTime(log.created_at)}
                       </span>
                     </div>
-                    {log.remarks && (
-                      <p className="mt-0.5 text-slate-600">{log.remarks}</p>
-                    )}
+                    {log.remarks && <p className="mt-0.5 text-slate-600">{log.remarks}</p>}
                   </li>
                 ))}
               </ol>

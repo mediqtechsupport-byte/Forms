@@ -326,7 +326,5 @@ export async function deleteAnnouncement(id: number): Promise<void> {
 }
 
 export function canAccessRolePortal(userRole: UserRole, targetPortal: UserRole): boolean {
-  if (targetPortal === 'employee') return true; // All staff, including admins, can submit their own forms
-  if (userRole === 'boss') return true; // Boss can inspect HR, Boss, and Accounting workspaces
   return userRole === targetPortal;
 }

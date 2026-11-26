@@ -9,7 +9,6 @@ import {
   Paperclip,
   AlertCircle,
 } from 'lucide-react';
-import { createFormRequestWithFiles } from '../lib/api';
 import {
   PAYMENT_METHOD_LABELS,
   REQUEST_TYPE_META,
@@ -18,7 +17,7 @@ import {
   calculateHours,
   formatPHP,
 } from '../lib/constants';
-import { useAuth } from '../contexts/AuthContext';
+import { useAppData } from '../contexts/DataContext';
 import { useToast } from '../contexts/ToastContext';
 import { RequestTypeIcon } from './StatusBadges';
 import { SignaturePad } from './SignaturePad';
@@ -26,33 +25,22 @@ import type { ExpenseLineItem, PaymentMethod, RequestType } from '../types/datab
 
 interface NewRequestModalProps {
   open: boolean;
-  defaultType?: RequestType;
+  formType: RequestType;
   onClose: () => void;
-  onCreated: () => void;
 }
-
-const ALL_TYPES: RequestType[] = [
-  'leave',
-  'overtime',
-  'reimbursement',
-  'official_business',
-  'cash_advance',
-  'other',
-];
 
 const todayIso = () => new Date().toISOString().slice(0, 10);
 
 export function NewRequestModal({
   open,
-  defaultType = 'leave',
+  formType,
   onClose,
-  onCreated,
 }: NewRequestModalProps) {
-  const { profile, leaveBalance, refreshProfile } = useAuth();
+  const { activeProfile: profile, submitForm } = useAppData();
   const { toast } = useToast();
 
-  const [requestType, setRequestType] = useState<RequestType>(defaultType);
-  const [subtype, setSubtype] = useState(SUBTYPE_OPTIONS[defaultType][0].value);
+  const requestType = formType;
+  const [subtype, setSubtype] = useState(SUBTYPE_OPTIONS[formType][0].value);
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [priority, setPriority] = useState<'normal' | 'urgent'>('normal');
@@ -60,6 +48,7 @@ export function NewRequestModal({
   // Schedule fields
   const [startDate, setStartDate] = useState(todayIso());
   const [endDate, setEndDate] = useState(todayIso());
+  const [leaveDays, setLeaveDays] = useState('1');
   const [halfDay, setHalfDay] = useState(false);
   const [halfDayPeriod, setHalfDayPeriod] = useState<'AM' | 'PM'>('AM');
   const [startTime, setStartTime] = useState('17:30');
@@ -94,24 +83,19 @@ export function NewRequestModal({
 
   useEffect(() => {
     if (open) {
-      setRequestType(defaultType);
-      setSubtype(SUBTYPE_OPTIONS[defaultType][0].value);
+      setSubtype(SUBTYPE_OPTIONS[formType][0].value);
       setTitle('');
       setDescription('');
       setPriority('normal');
       setStartDate(todayIso());
       setEndDate(todayIso());
+      setLeaveDays('1');
       setHalfDay(false);
       setFiles([]);
       setLineItems([{ description: '', category: 'Travel & Meals', amount: 0, receipt_no: '' }]);
       setCashAdvanceAmount('');
     }
-  }, [open, defaultType]);
-
-  const handleTypeSelect = (nextType: RequestType) => {
-    setRequestType(nextType);
-    setSubtype(SUBTYPE_OPTIONS[nextType][0].value);
-  };
+  }, [open, formType]);
 
   const handleSignatureChange = useCallback((val: string, mode: 'drawn' | 'typed') => {
     setSignature(val);
@@ -120,11 +104,12 @@ export function NewRequestModal({
 
   if (!open || !profile) return null;
 
+  const parsedLeaveDays = parseFloat(leaveDays);
   const computedDays =
     requestType === 'leave'
-      ? halfDay
-        ? 0.5
-        : calculateBusinessDays(startDate, endDate)
+      ? Number.isFinite(parsedLeaveDays) && parsedLeaveDays > 0
+        ? parsedLeaveDays
+        : null
       : requestType === 'official_business'
         ? calculateBusinessDays(startDate, endDate)
         : null;
@@ -172,6 +157,11 @@ export function NewRequestModal({
       return;
     }
 
+    if (requestType === 'leave' && (!computedDays || computedDays <= 0)) {
+      toast('Enter leave days', 'Please enter how many days of leave you are filing.', 'error');
+      return;
+    }
+
     if (requestType === 'reimbursement' && reimbursementTotal <= 0) {
       toast('Enter expense amount', 'Add at least one expense item with an amount greater than ₱0.', 'error');
       return;
@@ -195,7 +185,7 @@ export function NewRequestModal({
 
     setSubmitting(true);
     try {
-      const created = await createFormRequestWithFiles(
+      const created = await submitForm(
         {
           employee_id: profile.id,
           request_type: requestType,
@@ -263,8 +253,6 @@ export function NewRequestModal({
         `Digital form submitted (${created.reference_no})`,
         `Delivered immediately to ${REQUEST_TYPE_META[requestType].routedTo}.`
       );
-      await refreshProfile();
-      onCreated();
       onClose();
     } catch (err) {
       toast(
@@ -277,26 +265,25 @@ export function NewRequestModal({
     }
   };
 
-  const vlRemaining = leaveBalance
-    ? Math.max(0, Number(leaveBalance.vacation_total) - Number(leaveBalance.vacation_used))
-    : 15;
-  const slRemaining = leaveBalance
-    ? Math.max(0, Number(leaveBalance.sick_total) - Number(leaveBalance.sick_used))
-    : 15;
-  const elRemaining = leaveBalance
-    ? Math.max(0, Number(leaveBalance.emergency_total) - Number(leaveBalance.emergency_used))
-    : 5;
+  const formMeta = REQUEST_TYPE_META[requestType];
 
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-900/60 p-3 backdrop-blur-xs sm:p-6">
       <div className="my-auto w-full max-w-3xl overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl">
-        {/* Header */}
+        {/* Dedicated Form Header */}
         <div className="flex items-center justify-between border-b border-slate-200 bg-[#0a192f] px-6 py-4 text-white">
-          <div>
-            <p className="text-[11px] font-bold tracking-widest text-sky-400 uppercase">
-              Paperless Digital Submission
-            </p>
-            <h2 className="text-lg font-bold">File a Digital Employee Form</h2>
+          <div className="flex items-center gap-3.5">
+            <div
+              className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-white shadow-sm ${formMeta.bgSoft}`}
+            >
+              <RequestTypeIcon type={requestType} className="h-5 w-5" />
+            </div>
+            <div>
+              <p className="text-[11px] font-bold tracking-widest text-sky-400 uppercase">
+                {formMeta.formCode} · Routed to {formMeta.routedTo}
+              </p>
+              <h2 className="text-lg font-bold">{formMeta.label} Form</h2>
+            </div>
           </div>
           <button
             type="button"
@@ -309,64 +296,21 @@ export function NewRequestModal({
         </div>
 
         <form onSubmit={handleSubmit} className="max-h-[82vh] space-y-5 overflow-y-auto p-6">
-          {/* 1. Form Type Selector */}
-          <div>
-            <label className="mb-2 block text-xs font-bold tracking-wider text-slate-600 uppercase">
-              1. Choose Form Type
-            </label>
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-              {ALL_TYPES.map((type) => {
-                const info = REQUEST_TYPE_META[type];
-                const selected = requestType === type;
-                return (
-                  <button
-                    key={type}
-                    type="button"
-                    onClick={() => handleTypeSelect(type)}
-                    className={`flex items-start gap-2.5 rounded-xl border p-3 text-left transition ${
-                      selected
-                        ? 'border-sky-500 bg-sky-50/70 ring-2 ring-sky-500/20'
-                        : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50'
-                    }`}
-                  >
-                    <div
-                      className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-white ${info.bgSoft}`}
-                    >
-                      <RequestTypeIcon type={type} className="h-4 w-4" />
-                    </div>
-                    <div className="min-w-0">
-                      <p className="text-xs font-bold text-slate-900">{info.shortLabel}</p>
-                      <p className="mt-0.5 text-[11px] text-slate-500">{info.routedTo}</p>
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Live Leave Balance Strip when filing Leave */}
-          {requestType === 'leave' && (
-            <div className="grid grid-cols-3 gap-2.5 rounded-xl border border-sky-200/80 bg-sky-50/60 p-3 text-center">
-              <div>
-                <p className="text-[11px] font-semibold text-sky-700">Vacation Leave</p>
-                <p className="text-lg font-extrabold text-slate-900">{vlRemaining} days</p>
-              </div>
-              <div className="border-x border-sky-200">
-                <p className="text-[11px] font-semibold text-sky-700">Sick Leave</p>
-                <p className="text-lg font-extrabold text-slate-900">{slRemaining} days</p>
-              </div>
-              <div>
-                <p className="text-[11px] font-semibold text-sky-700">Emergency Leave</p>
-                <p className="text-lg font-extrabold text-slate-900">{elRemaining} days</p>
-              </div>
-            </div>
-          )}
-
-          {/* 2. Core Fields */}
+          {/* Core Fields */}
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
               <label className="mb-1 block text-xs font-semibold text-slate-700">
-                Category / Subtype
+                {requestType === 'leave'
+                  ? 'Leave Type'
+                  : requestType === 'overtime'
+                    ? 'Overtime Type'
+                    : requestType === 'reimbursement'
+                      ? 'Expense Category'
+                      : requestType === 'official_business'
+                        ? 'Field Work / OB Type'
+                        : requestType === 'cash_advance'
+                          ? 'Cash Advance Type'
+                          : 'Request Type'}
               </label>
               <select
                 value={subtype}
@@ -438,7 +382,11 @@ export function NewRequestModal({
                   <input
                     type="checkbox"
                     checked={halfDay}
-                    onChange={(e) => setHalfDay(e.target.checked)}
+                    onChange={(e) => {
+                      const next = e.target.checked;
+                      setHalfDay(next);
+                      setLeaveDays(next ? '0.5' : String(calculateBusinessDays(startDate, endDate)));
+                    }}
                     className="h-4 w-4 rounded border-slate-300 text-sky-600 focus:ring-sky-500"
                   />
                   Half-day leave (0.5 day)
@@ -454,8 +402,13 @@ export function NewRequestModal({
                     required
                     value={startDate}
                     onChange={(e) => {
-                      setStartDate(e.target.value);
-                      if (e.target.value > endDate) setEndDate(e.target.value);
+                      const nextStart = e.target.value;
+                      setStartDate(nextStart);
+                      const nextEnd = nextStart > endDate ? nextStart : endDate;
+                      if (nextStart > endDate) setEndDate(nextStart);
+                      if (!halfDay) {
+                        setLeaveDays(String(calculateBusinessDays(nextStart, nextEnd)));
+                      }
                     }}
                     className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
                   />
@@ -484,18 +437,29 @@ export function NewRequestModal({
                       required
                       min={startDate}
                       value={endDate}
-                      onChange={(e) => setEndDate(e.target.value)}
+                      onChange={(e) => {
+                        const nextEnd = e.target.value;
+                        setEndDate(nextEnd);
+                        setLeaveDays(String(calculateBusinessDays(startDate, nextEnd)));
+                      }}
                       className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
                     />
                   </div>
                 )}
-                <div className="flex flex-col justify-center rounded-lg border border-sky-200 bg-white px-3 py-2">
-                  <span className="text-[11px] font-semibold text-slate-500">
-                    Computed Leave Days
-                  </span>
-                  <span className="text-base font-extrabold text-sky-700">
-                    {computedDays} {computedDays === 1 ? 'working day' : 'working days'}
-                  </span>
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-slate-600">
+                    Number of Days *
+                  </label>
+                  <input
+                    type="number"
+                    step="0.5"
+                    min="0.5"
+                    required
+                    value={leaveDays}
+                    onChange={(e) => setLeaveDays(e.target.value)}
+                    placeholder="e.g., 1, 2, 0.5"
+                    className="w-full rounded-lg border border-sky-300 bg-white px-3 py-2 text-sm font-bold text-sky-800 focus:border-sky-500 focus:ring-2 focus:ring-sky-500/20 focus:outline-none"
+                  />
                 </div>
               </div>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -974,7 +938,7 @@ export function NewRequestModal({
               ) : (
                 <Send className="h-4 w-4" />
               )}
-              {submitting ? 'Submitting Digital Form...' : 'Sign & Submit Form'}
+              {submitting ? `Submitting ${formMeta.shortLabel} Form...` : `Sign & Submit ${formMeta.shortLabel} Form`}
             </button>
           </div>
         </form>

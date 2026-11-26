@@ -1,14 +1,13 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { Save, Loader2, Shield } from 'lucide-react';
-import { useAuth } from '../contexts/AuthContext';
+import { useAppData } from '../contexts/DataContext';
 import { useToast } from '../contexts/ToastContext';
-import { updateProfile } from '../lib/api';
 import { DEPARTMENTS, ROLE_META } from '../lib/constants';
 import { SignaturePad } from '../components/SignaturePad';
 import { RoleBadge } from '../components/StatusBadges';
 
 export function ProfilePage() {
-  const { profile, refreshProfile } = useAuth();
+  const { activeProfile: profile, saveProfile } = useAppData();
   const { toast } = useToast();
 
   const [fullName, setFullName] = useState(profile?.full_name ?? '');
@@ -17,6 +16,16 @@ export function ProfilePage() {
   const [phone, setPhone] = useState(profile?.phone ?? '');
   const [signatureData, setSignatureData] = useState(profile?.signature_data ?? '');
   const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (profile) {
+      setFullName(profile.full_name);
+      setDepartment(profile.department);
+      setPosition(profile.position);
+      setPhone(profile.phone ?? '');
+      setSignatureData(profile.signature_data ?? '');
+    }
+  }, [profile]);
 
   const handleSigChange = useCallback((val: string) => {
     setSignatureData(val);
@@ -28,14 +37,13 @@ export function ProfilePage() {
     e.preventDefault();
     setSaving(true);
     try {
-      await updateProfile(profile.id, {
+      await saveProfile(profile.id, {
         full_name: fullName.trim() || profile.full_name,
         department,
         position: position.trim() || profile.position,
         phone: phone.trim() || null,
         signature_data: signatureData || null,
       });
-      await refreshProfile();
       toast(
         'Profile & e-signature saved',
         'Your default signature will automatically appear on future digital forms and approvals.'
