@@ -69,13 +69,13 @@ const HEAD_CLASS =
   'p-4 font-medium text-xs text-muted-foreground uppercase tracking-wider whitespace-nowrap';
 
 const STATUS_BADGE_CLASSES: Record<RequestStatus, string> = {
-  approved: 'bg-green-50 text-green-700 border-green-200',
-  paid: 'bg-teal-50 text-teal-700 border-teal-200',
-  pending: 'bg-amber-50 text-amber-800 border-amber-200',
-  hr_endorsed: 'bg-violet-50 text-violet-700 border-violet-200',
-  accounting_verified: 'bg-cyan-50 text-cyan-700 border-cyan-200',
-  rejected: 'bg-rose-50 text-rose-700 border-rose-200',
-  cancelled: 'bg-slate-100 text-slate-500 border-slate-200',
+  approved: 'bg-emerald-500/15 text-emerald-700 [.fy-dark_&]:text-emerald-300 border-emerald-500/35',
+  paid: 'bg-teal-500/15 text-teal-700 [.fy-dark_&]:text-teal-300 border-teal-500/35',
+  pending: 'bg-[var(--fy-amber-bg)] text-[var(--fy-amber)] border-amber-500/35',
+  hr_endorsed: 'bg-sky-500/15 text-sky-700 [.fy-dark_&]:text-sky-300 border-sky-500/35',
+  accounting_verified: 'bg-cyan-500/15 text-cyan-700 [.fy-dark_&]:text-cyan-300 border-cyan-500/35',
+  rejected: 'bg-[var(--fy-rose-bg)] text-[var(--fy-rose)] border-rose-500/35',
+  cancelled: 'bg-muted text-muted-foreground border-border',
 };
 
 interface EmployeeFormsDatatableProps {
@@ -463,8 +463,8 @@ export function EmployeeFormsDatatable({
 
                       <TableCell className="p-4">
                         <div className="flex items-center gap-3">
-                          <Avatar className="size-10 bg-muted">
-                            <AvatarFallback className={`${meta.bgSoft} text-white`}>
+                          <Avatar className="size-10 border border-border bg-[var(--fy-soft)]">
+                            <AvatarFallback className="bg-[var(--fy-soft)] text-[var(--fy-text)]">
                               <RequestTypeIcon type={req.request_type} className="size-4" />
                             </AvatarFallback>
                           </Avatar>
@@ -474,11 +474,11 @@ export function EmployeeFormsDatatable({
                                 {req.title}
                               </span>
                               {req.priority === 'urgent' && (
-                                <AlertTriangle className="size-3.5 shrink-0 text-rose-500" />
+                                <AlertTriangle className="size-3.5 shrink-0 text-[var(--fy-rose)]" />
                               )}
                             </div>
                             <div className="mt-0.5 flex items-center gap-1.5 text-xs text-muted-foreground">
-                              <span className="font-mono font-semibold text-foreground/75">
+                              <span className="font-mono font-semibold text-foreground/85">
                                 {req.reference_no}
                               </span>
                               <span>·</span>
@@ -509,7 +509,7 @@ export function EmployeeFormsDatatable({
                       <TableCell className="p-4 text-xs">
                         {req.amount != null ? (
                           <div>
-                            <div className="font-semibold text-emerald-700">
+                            <div className="font-semibold text-emerald-700 [.fy-dark_&]:text-emerald-300">
                               {formatPHP(req.amount)}
                             </div>
                             <div className="text-[11px] text-muted-foreground">
@@ -522,7 +522,7 @@ export function EmployeeFormsDatatable({
                           </div>
                         ) : req.total_hours != null ? (
                           <div>
-                            <div className="font-semibold text-indigo-700">
+                            <div className="font-semibold text-[var(--fy-text)]">
                               {req.total_hours} hrs
                             </div>
                             <div className="text-[11px] text-muted-foreground">
@@ -538,7 +538,7 @@ export function EmployeeFormsDatatable({
                                 : ''}
                             </div>
                             {req.total_days != null && (
-                              <div className="text-[11px] font-semibold text-sky-700">
+                              <div className="text-[11px] font-semibold text-[var(--fy-text)]">
                                 {req.total_days}{' '}
                                 {Number(req.total_days) === 1 ? 'day' : 'days'}
                               </div>
@@ -556,7 +556,7 @@ export function EmployeeFormsDatatable({
                             {statusMeta.label}
                           </Badge>
                           {req.boss_status === 'approved' ? (
-                            <span className="inline-flex items-center gap-1 rounded-full bg-[#163362]/10 px-2 py-0.5 text-[10px] font-bold text-[#163362] dark:bg-[#e6d8bf]/15 dark:text-[#e6d8bf]">
+                            <span className="inline-flex items-center gap-1 rounded-full border border-border bg-[var(--fy-soft)] px-2 py-0.5 text-[10px] font-bold text-[var(--fy-text)]">
                               <Lock className="size-2.5" />
                               Locked · History
                             </span>
@@ -565,7 +565,7 @@ export function EmployeeFormsDatatable({
                               {getBossWaitReason(req)}
                             </span>
                           ) : isReadyForBoss(req) ? (
-                            <span className="text-[10px] font-semibold text-[#163362] dark:text-[#e6d8bf]">
+                            <span className="text-[10px] font-semibold text-[var(--fy-text)]">
                               Ready for Boss
                             </span>
                           ) : null}
@@ -597,7 +597,7 @@ export function EmployeeFormsDatatable({
                                 className="cursor-pointer py-2"
                                 onClick={() => onInspect(req)}
                               >
-                                <Eye className="size-3.5 text-sky-600" />
+                                <Eye className="size-3.5 text-primary" />
                                 View Digital Slip
                               </DropdownMenuItem>
                               <DropdownMenuItem
@@ -607,7 +607,7 @@ export function EmployeeFormsDatatable({
                                   setTimeout(() => window.print(), 250);
                                 }}
                               >
-                                <Printer className="size-3.5 text-slate-600" />
+                                <Printer className="size-3.5 text-muted-foreground" />
                                 Print / Save PDF
                               </DropdownMenuItem>
                               {req.boss_status === 'approved' ? (
@@ -631,7 +631,7 @@ export function EmployeeFormsDatatable({
                                         <DropdownMenuItem
                                           disabled={quickVerifyingId === req.id}
                                           onClick={() => onQuickVerify(req)}
-                                          className="cursor-pointer py-2 font-semibold text-teal-700 focus:text-teal-700"
+                                          className="cursor-pointer py-2 font-semibold text-teal-600 focus:text-teal-600 dark:text-teal-300 dark:focus:text-teal-300"
                                         >
                                           <CheckCircle2 className="size-3.5" />
                                           {quickVerifyingId === req.id
@@ -648,7 +648,7 @@ export function EmployeeFormsDatatable({
                                         <DropdownMenuItem
                                           disabled={quickEndorsingId === req.id}
                                           onClick={() => onQuickEndorse(req)}
-                                          className="cursor-pointer py-2 font-semibold text-sky-700 focus:text-sky-700"
+                                          className="cursor-pointer py-2 font-semibold text-sky-600 focus:text-sky-600 dark:text-sky-300 dark:focus:text-sky-300"
                                         >
                                           <CheckCircle2 className="size-3.5" />
                                           {quickEndorsingId === req.id
@@ -663,7 +663,7 @@ export function EmployeeFormsDatatable({
                                         <DropdownMenuItem
                                           disabled={quickApprovingId === req.id}
                                           onClick={() => onQuickApprove(req)}
-                                          className="cursor-pointer py-2 font-semibold text-emerald-700 focus:text-emerald-700"
+                                          className="cursor-pointer py-2 font-semibold text-emerald-600 focus:text-emerald-600 dark:text-emerald-300 dark:focus:text-emerald-300"
                                         >
                                           <CheckCircle2 className="size-3.5" />
                                           {quickApprovingId === req.id

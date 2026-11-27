@@ -39,31 +39,33 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
         {items.map((item) => (
           <div
             key={item.id}
-            className={`flex items-start gap-3 rounded-xl border bg-white p-3.5 shadow-lg ring-1 ring-black/5 transition-all ${
+            className={`flex items-start gap-3 rounded-2xl border bg-card p-3.5 text-foreground shadow-xl ring-1 ring-black/10 transition-all ${
               item.variant === 'error'
-                ? 'border-rose-200'
+                ? 'border-rose-500/40'
                 : item.variant === 'info'
-                  ? 'border-sky-200'
-                  : 'border-emerald-200'
+                  ? 'border-sky-500/40'
+                  : 'border-emerald-500/40'
             }`}
           >
             {item.variant === 'error' ? (
-              <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-rose-500" />
+              <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-rose-500 dark:text-rose-400" />
             ) : item.variant === 'info' ? (
-              <Info className="mt-0.5 h-5 w-5 shrink-0 text-sky-500" />
+              <Info className="mt-0.5 h-5 w-5 shrink-0 text-sky-500 dark:text-sky-400" />
             ) : (
-              <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-emerald-500" />
+              <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-emerald-500 dark:text-emerald-400" />
             )}
             <div className="min-w-0 flex-1">
-              <p className="text-sm font-semibold text-slate-900">{item.title}</p>
+              <p className="text-sm font-semibold text-foreground">{item.title}</p>
               {item.description && (
-                <p className="mt-0.5 text-xs leading-relaxed text-slate-600">{item.description}</p>
+                <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
+                  {item.description}
+                </p>
               )}
             </div>
             <button
               type="button"
               onClick={() => dismiss(item.id)}
-              className="rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+              className="cursor-pointer rounded-md p-1 text-muted-foreground transition hover:bg-muted hover:text-foreground"
               aria-label="Dismiss notification"
             >
               <X className="h-4 w-4" />

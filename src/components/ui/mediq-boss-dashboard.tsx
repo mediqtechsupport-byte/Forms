@@ -37,6 +37,7 @@ import {
   LayoutDashboard,
   Loader2,
   LogOut,
+  Megaphone,
   Moon,
   Palette,
   PenTool,
@@ -66,6 +67,8 @@ import {
 } from "@/lib/constants";
 import { CreateAccountCard } from "@/components/CreateAccountCard";
 import { EmployeeHistoryExportModal } from "@/components/EmployeeHistoryExportModal";
+import { HrMemosBoardView } from "@/components/HrMemosBoardView";
+import { ProfileAvatarUploader } from "@/components/ProfileAvatarUploader";
 import { SignaturePad } from "@/components/SignaturePad";
 import { RequestTypeBadge, RequestTypeIcon, RoleBadge } from "@/components/StatusBadges";
 import { EmployeeFormsDatatable } from "@/components/ui/employee-forms-datatable";
@@ -75,11 +78,11 @@ import {
   matchesProfileSearch,
   matchesRequestSearch,
 } from "@/components/ui/portal-search-bar";
-import type { FormRequest, Profile, RequestType, UserRole } from "@/types/database";
+import type { Announcement, FormRequest, Profile, RequestType, UserRole } from "@/types/database";
 
 /* ------------------------------------------------------------------ types */
 
-type BossView = "dashboard" | "approvals" | "all" | "roles" | "settings";
+type BossView = "dashboard" | "approvals" | "all" | "roles" | "memos" | "settings";
 type Theme = "light" | "dark";
 type QueueFilter = "all" | "urgent" | "endorsed" | "financial";
 type SetTab = "profile" | "overview" | "look";
@@ -128,6 +131,7 @@ const NAV_GROUPS: { id: string; label: string; items: NavItem[] }[] = [
       { id: "approvals", label: "Pending Sign-Off", icon: ClipboardCheck },
       { id: "all", label: "Approval History", icon: Files },
       { id: "roles", label: "Roles & Staff", icon: UserCog },
+      { id: "memos", label: "HR Memos", icon: Megaphone },
     ],
   },
   {
@@ -277,15 +281,22 @@ function AvatarCircle({
   name,
   tint = "#e6dac6",
   size = 44,
+  avatarUrl,
 }: {
   name: string;
   tint?: string;
   size?: number;
+  avatarUrl?: string | null;
 }) {
+  const [imgFailed, setImgFailed] = useState(false);
+  useEffect(() => {
+    setImgFailed(false);
+  }, [avatarUrl]);
+  const showPhoto = Boolean(avatarUrl && !imgFailed);
   return (
     <span
       aria-hidden="true"
-      className="grid flex-none place-items-center rounded-full font-semibold tracking-[0.02em] text-[#0d1c36]"
+      className="grid flex-none place-items-center overflow-hidden rounded-full font-semibold tracking-[0.02em] text-[#0d1c36]"
       style={{
         width: size,
         height: size,
@@ -293,7 +304,16 @@ function AvatarCircle({
         fontSize: Math.round(size * 0.32),
       }}
     >
-      {initials(name)}
+      {showPhoto ? (
+        <img
+          src={avatarUrl!}
+          alt=""
+          onError={() => setImgFailed(true)}
+          className="h-full w-full object-cover"
+        />
+      ) : (
+        initials(name)
+      )}
     </span>
   );
 }
@@ -1131,7 +1151,7 @@ function BossSettingsView({
   onAccent: (hex: string) => void;
   onToast: (msg: string) => void;
 }) {
-  const { saveProfile } = useAppData();
+  const { saveProfile, refreshAll } = useAppData();
   const { toast } = useToast();
   const [tab, setTab] = useState<SetTab>("profile");
   const [fullName, setFullName] = useState(profile?.full_name ?? "");
@@ -1252,21 +1272,27 @@ function BossSettingsView({
             >
               {tab === "profile" ? (
                 <form onSubmit={handleSave} className="space-y-6">
-                  <div className="flex flex-wrap items-center gap-4">
-                    <AvatarCircle
-                      name={fullName || profile?.full_name || "Executive"}
-                      tint="#e6dac6"
-                      size={60}
+                  {profile ? (
+                    <ProfileAvatarUploader
+                      profileId={profile.id}
+                      fullName={fullName || profile.full_name || "Executive"}
+                      subtitle={`${profile.employee_code ?? ""} · ${profile.email}`}
+                      heading="Executive Profile & Approval E-Signature"
+                      avatarUrl={profile.avatar_url}
+                      onUploaded={async () => {
+                        await refreshAll();
+                      }}
                     />
-                    <div className="min-w-0">
-                      <h2 className="text-[20px] font-semibold tracking-[-0.02em]">
-                        Executive Profile &amp; Approval E-Signature
-                      </h2>
-                      <p className="mt-0.5 text-[14px] text-muted-foreground">
-                        {profile?.employee_code} · {profile?.email}
-                      </p>
+                  ) : (
+                    <div className="flex flex-wrap items-center gap-4">
+                      <AvatarCircle name={fullName || "Executive"} tint="#e6dac6" size={60} />
+                      <div className="min-w-0">
+                        <h2 className="text-[20px] font-semibold tracking-[-0.02em]">
+                          Executive Profile &amp; Approval E-Signature
+                        </h2>
+                      </div>
                     </div>
-                  </div>
+                  )}
 
                   <div className="grid gap-4 sm:grid-cols-2">
                     <label className={labelCls}>
@@ -1311,14 +1337,15 @@ function BossSettingsView({
                     </label>
                   </div>
 
-                  <div className="rounded-2xl border border-border bg-white p-4 text-slate-900">
-                    <p className="mb-3 text-xs font-semibold text-slate-600">
+                  <div className="rounded-2xl border border-border bg-card p-4 text-foreground">
+                    <p className="mb-3 text-xs font-semibold text-muted-foreground">
                       Default Boss Executive Signature Stamp (appears on approved digital PDF slips)
                     </p>
                     <SignaturePad
                       signerName={fullName || profile?.full_name || "Boss Executive"}
                       initialSignature={signatureData || null}
                       onChange={handleSigChange}
+                      adaptiveTheme
                     />
                   </div>
 
@@ -1406,6 +1433,8 @@ function Sidebar({
   onGo,
   dark,
   pendingCount,
+  unreadMemos,
+  totalMemos,
   clearancePct,
   hasSignature,
   onQuickAction,
@@ -1415,6 +1444,8 @@ function Sidebar({
   onGo: (v: BossView) => void;
   dark: boolean;
   pendingCount: number;
+  unreadMemos: number;
+  totalMemos: number;
   clearancePct: number;
   hasSignature: boolean;
   onQuickAction: () => void;
@@ -1509,6 +1540,20 @@ function Sidebar({
                           className="ml-auto rounded-md bg-[var(--fy-950)] px-[7px] py-0.5 text-[10.5px] font-semibold text-[#f5efe4]"
                         >
                           {pendingCount}
+                        </motion.span>
+                      ) : n.id === "memos" && (unreadMemos > 0 || totalMemos > 0) ? (
+                        <motion.span
+                          key={`${unreadMemos}-${totalMemos}`}
+                          initial={{ scale: 0.6 }}
+                          animate={{ scale: 1 }}
+                          transition={{ type: "spring", bounce: 0, duration: 0.45 }}
+                          className={`ml-auto rounded-md px-[7px] py-0.5 text-[10.5px] font-semibold ${
+                            unreadMemos > 0
+                              ? "bg-[var(--fy-rose)] text-[#081428]"
+                              : "bg-[var(--fy-soft)] text-[var(--fy-text)]"
+                          }`}
+                        >
+                          {unreadMemos > 0 ? `${unreadMemos} new` : totalMemos}
                         </motion.span>
                       ) : null}
                     </button>
@@ -1767,16 +1812,22 @@ function TabBar({
 
 function BossNotificationTray({
   awaitingBoss,
+  announcements,
+  seenMemoIds,
   readIds,
   onMarkAllRead,
   onInspect,
+  onOpenMemo,
   onClose,
   bellRef,
 }: {
   awaitingBoss: FormRequest[];
+  announcements: Announcement[];
+  seenMemoIds: Set<number>;
   readIds: Set<string>;
   onMarkAllRead: () => void;
   onInspect: (req: FormRequest) => void;
+  onOpenMemo: (ann: Announcement) => void;
   onClose: () => void;
   bellRef: RefObject<HTMLButtonElement | null>;
 }) {
@@ -1812,8 +1863,8 @@ function BossNotificationTray({
       className="fixed inset-x-3 top-[76px] z-50 origin-top-right rounded-[20px] bg-card p-4 shadow-[var(--fy-pop)] sm:absolute sm:inset-x-auto sm:right-[-8px] sm:top-[calc(100%+12px)] sm:w-[360px]"
     >
       <div className="mb-2.5 flex items-center justify-between">
-        <p className="font-semibold">Pending Executive Sign-Off</p>
-        {awaitingBoss.length > 0 ? (
+        <p className="font-semibold">Executive Alerts &amp; HR Memos</p>
+        {awaitingBoss.length > 0 || announcements.length > 0 ? (
           <button
             type="button"
             onClick={onMarkAllRead}
@@ -1823,12 +1874,39 @@ function BossNotificationTray({
           </button>
         ) : null}
       </div>
-      {awaitingBoss.length === 0 ? (
+      {awaitingBoss.length === 0 && announcements.length === 0 ? (
         <p className="rounded-[14px] bg-muted p-4 text-center text-xs text-muted-foreground">
-          All caught up — zero forms awaiting your signature.
+          All caught up — zero pending sign-offs or unread HR memos.
         </p>
       ) : (
-        <ul className="grid max-h-[340px] gap-1 overflow-y-auto">
+        <ul className="grid max-h-[360px] gap-1 overflow-y-auto">
+          {announcements.slice(0, 4).map((ann) => (
+            <li key={`memo-${ann.id}`}>
+              <button
+                type="button"
+                onClick={() => {
+                  onOpenMemo(ann);
+                  onClose();
+                }}
+                className={`fy-focus flex w-full cursor-pointer items-start gap-3 rounded-[14px] p-2.5 text-left text-[13.5px] leading-[1.4] text-muted-foreground transition-colors hover:bg-muted ${
+                  !seenMemoIds.has(ann.id) ? "bg-[var(--fy-soft)]" : ""
+                }`}
+              >
+                <span className="grid h-9 w-9 flex-none place-items-center rounded-full bg-[#d9c7a7] text-[#081428]">
+                  <Megaphone className="h-4 w-4" />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <b className="font-semibold text-foreground">
+                    {ann.author?.full_name ?? "HR Admin"}
+                  </b>{" "}
+                  posted memo <b className="font-semibold text-foreground">{ann.title}</b>
+                  <span className="mt-0.5 block text-xs text-[var(--fy-faint)]">
+                    HR Memo · {formatDate(ann.created_at)}
+                  </span>
+                </span>
+              </button>
+            </li>
+          ))}
           {awaitingBoss.slice(0, 6).map((req) => (
             <li key={req.id}>
               <button
@@ -1845,6 +1923,7 @@ function BossNotificationTray({
                   name={req.employee?.full_name || "Staff"}
                   tint="#e6dac6"
                   size={36}
+                  avatarUrl={req.employee?.avatar_url}
                 />
                 <span className="min-w-0 flex-1">
                   <b className="font-semibold text-foreground">
@@ -1872,21 +1951,21 @@ export function MediqBossDashboard({
   onInspect,
 }: MediqBossDashboardProps) {
   const { signOut } = useAuth();
-  const { activeProfile: profile, performReview, saveProfile } = useAppData();
+  const { activeProfile: profile, announcements, performReview, saveProfile } = useAppData();
   const { toast } = useToast();
 
   const [theme, setTheme] = useState<Theme>(() => {
     try {
-      return localStorage.getItem("mediq-boss-theme") === "dark" ? "dark" : "light";
+      return localStorage.getItem("mediq-portal-theme-v2") === "light" ? "light" : "dark";
     } catch {
-      return "light";
+      return "dark";
     }
   });
   const [accent, setAccent] = useState<string>(() => {
     try {
-      return localStorage.getItem("mediq-boss-accent") || "#163362";
+      return localStorage.getItem("mediq-portal-accent-v2") || "#0f2942";
     } catch {
-      return "#163362";
+      return "#0f2942";
     }
   });
 
@@ -1897,6 +1976,43 @@ export function MediqBossDashboard({
   const [allStatusFilter, setAllStatusFilter] = useState<string>("boss_approved");
   const [tray, setTray] = useState(false);
   const [readIds, setReadIds] = useState<Set<string>>(() => new Set());
+  const [seenMemoIds, setSeenMemoIds] = useState<Set<number>>(() => {
+    try {
+      const raw = localStorage.getItem(`mediq-seen-memos-${profile?.id ?? "boss"}`);
+      const arr = raw ? (JSON.parse(raw) as number[]) : [];
+      return new Set(Array.isArray(arr) ? arr : []);
+    } catch {
+      return new Set();
+    }
+  });
+  const prevMemoIdsRef = useRef<Set<number> | null>(null);
+  const persistSeenMemos = useCallback(
+    (next: Set<number>) => {
+      setSeenMemoIds(next);
+      try {
+        localStorage.setItem(
+          `mediq-seen-memos-${profile?.id ?? "boss"}`,
+          JSON.stringify(Array.from(next))
+        );
+      } catch {
+        // ignore
+      }
+    },
+    [profile?.id]
+  );
+  const markAllMemosRead = useCallback(() => {
+    const next = new Set(seenMemoIds);
+    for (const a of announcements) next.add(a.id);
+    persistSeenMemos(next);
+  }, [announcements, seenMemoIds, persistSeenMemos]);
+  useEffect(() => {
+    const cur = new Set(announcements.map((a) => a.id));
+    if (prevMemoIdsRef.current !== null) {
+      const newest = announcements.find((a) => !prevMemoIdsRef.current!.has(a.id));
+      if (newest) setToastMsg({ id: Date.now(), msg: `New HR Memo: ${newest.title}` });
+    }
+    prevMemoIdsRef.current = cur;
+  }, [announcements]);
   const [quickApprovingId, setQuickApprovingId] = useState<string | null>(null);
   const [updatingRoleId, setUpdatingRoleId] = useState<string | null>(null);
   const [exportOpen, setExportOpen] = useState(false);
@@ -1912,15 +2028,19 @@ export function MediqBossDashboard({
 
   useEffect(() => {
     try {
-      localStorage.setItem("mediq-boss-theme", theme);
+      localStorage.setItem("mediq-portal-theme-v2", theme);
     } catch {
       // ignore
+    }
+    if (typeof document !== "undefined") {
+      document.documentElement.classList.toggle("dark", theme === "dark");
+      document.documentElement.classList.toggle("fy-light", theme === "light");
     }
   }, [theme]);
 
   useEffect(() => {
     try {
-      localStorage.setItem("mediq-boss-accent", accent);
+      localStorage.setItem("mediq-portal-accent-v2", accent);
     } catch {
       // ignore
     }
@@ -2026,7 +2146,13 @@ export function MediqBossDashboard({
     return source.filter((r) => matchesRequestSearch(r, q)).slice(0, 5);
   }, [awaitingBoss, requests, q]);
 
-  const hasUnread = awaitingBoss.some((r) => !readIds.has(r.id));
+  const unreadMemosCount = useMemo(
+    () => announcements.filter((a) => !seenMemoIds.has(a.id)).length,
+    [announcements, seenMemoIds]
+  );
+  const unreadNoticeCount =
+    awaitingBoss.filter((r) => !readIds.has(r.id)).length + unreadMemosCount;
+  const hasUnread = unreadNoticeCount > 0;
 
   /* Live Actions */
   const handleQuickApprove = async (req: FormRequest) => {
@@ -2102,6 +2228,8 @@ export function MediqBossDashboard({
             onGo={go}
             dark={dark}
             pendingCount={awaitingBoss.length}
+            unreadMemos={unreadMemosCount}
+            totalMemos={announcements.length}
             clearancePct={clearancePct}
             hasSignature={hasSignature}
             onQuickAction={() => go(hasSignature ? "approvals" : "settings")}
@@ -2189,8 +2317,10 @@ export function MediqBossDashboard({
                           animate={{ scale: 1 }}
                           exit={{ scale: 0 }}
                           aria-hidden="true"
-                          className="absolute right-[11px] top-[10px] h-2 w-2 rounded-full bg-[var(--fy-rose)] shadow-[0_0_0_2px_var(--card)] sm:right-[13px] sm:top-3"
-                        />
+                          className="absolute -right-0.5 -top-0.5 grid min-h-[18px] min-w-[18px] place-items-center rounded-full bg-[var(--fy-rose)] px-1 text-[10px] font-bold text-[#081428] shadow-[0_0_0_2px_var(--card)]"
+                        >
+                          {unreadNoticeCount > 9 ? "9+" : unreadNoticeCount}
+                        </motion.span>
                       ) : null}
                     </AnimatePresence>
                   </motion.button>
@@ -2198,12 +2328,21 @@ export function MediqBossDashboard({
                     {tray ? (
                       <BossNotificationTray
                         awaitingBoss={awaitingBoss}
+                        announcements={announcements}
+                        seenMemoIds={seenMemoIds}
                         readIds={readIds}
                         bellRef={bellRef}
                         onClose={() => setTray(false)}
-                        onMarkAllRead={() =>
-                          setReadIds(new Set(awaitingBoss.map((r) => r.id)))
-                        }
+                        onMarkAllRead={() => {
+                          setReadIds(new Set(awaitingBoss.map((r) => r.id)));
+                          markAllMemosRead();
+                        }}
+                        onOpenMemo={(ann) => {
+                          const next = new Set(seenMemoIds);
+                          next.add(ann.id);
+                          persistSeenMemos(next);
+                          go("memos");
+                        }}
                         onInspect={onInspect}
                       />
                     ) : null}
@@ -2216,7 +2355,7 @@ export function MediqBossDashboard({
                   aria-label={`Executive profile for ${fullName}`}
                   className="fy-focus hidden cursor-pointer items-center gap-3 rounded-full py-0.5 pl-0.5 pr-2 text-left sm:flex"
                 >
-                  <AvatarCircle name={fullName} tint="#e6dac6" size={44} />
+                  <AvatarCircle name={fullName} tint="#e6dac6" size={44} avatarUrl={profile?.avatar_url} />
                   <span className="hidden xl:grid">
                     <span className="max-w-[180px] truncate text-[15px] font-medium leading-tight">
                       {fullName}
@@ -2424,6 +2563,7 @@ export function MediqBossDashboard({
                                       name={emp.full_name}
                                       tint="#e6dac6"
                                       size={34}
+                                      avatarUrl={emp.avatar_url}
                                     />
                                     <span className="min-w-0 flex-1">
                                       <span className="block truncate text-[14px] font-medium leading-[1.25]">
@@ -2824,13 +2964,13 @@ export function MediqBossDashboard({
                           <div className="flex flex-wrap items-center justify-between gap-2">
                             <div>
                               <CardTitle>
-                                Authorized Boss Executive Accounts (
+                                Authorized Executive Accounts — CEO &amp; COO (
                                 {profiles.filter((p) => p.role === "boss" && p.is_active).length})
                               </CardTitle>
                               <p className="mt-0.5 text-xs text-muted-foreground">
-                                Both Co-Executives (e.g., Boss &amp; Wife) can have separate login
-                                emails and their own saved E-Signatures. Whoever approves signs the
-                                slip and permanently locks it in History.
+                                Both CEO &amp; COO can maintain separate login emails and their own
+                                saved E-Signatures. Whoever approves signs the slip and permanently
+                                locks it in History.
                               </p>
                             </div>
                           </div>
@@ -2846,6 +2986,7 @@ export function MediqBossDashboard({
                                     name={bossAcc.full_name}
                                     tint="#e6dac6"
                                     size={38}
+                                    avatarUrl={bossAcc.avatar_url}
                                   />
                                   <div className="min-w-0 flex-1">
                                     <p className="truncate text-sm font-semibold text-foreground">
@@ -2904,6 +3045,7 @@ export function MediqBossDashboard({
                                           name={emp.full_name}
                                           tint="#e6dac6"
                                           size={34}
+                                          avatarUrl={emp.avatar_url}
                                         />
                                         <div>
                                           <p className="font-semibold text-foreground">
@@ -2971,6 +3113,13 @@ export function MediqBossDashboard({
                         </FyCard>
                       </div>
                     </>
+                  ) : view === "memos" ? (
+                    <HrMemosBoardView
+                      announcements={announcements}
+                      seenMemoIds={seenMemoIds}
+                      onMarkAllRead={markAllMemosRead}
+                      query={query}
+                    />
                   ) : (
                     <BossSettingsView
                       profile={profile}

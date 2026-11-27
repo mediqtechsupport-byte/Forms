@@ -1,19 +1,71 @@
 import { useNavigate } from 'react-router-dom';
 import {
-  LayoutDashboard,
-  ShieldCheck,
-  Users,
+  ArrowUpRight,
   Calculator,
-  ArrowRight,
-  FileCheck2,
+  LayoutDashboard,
   Lock,
   LogOut,
-  CheckCircle2,
+  ShieldCheck,
+  Users,
 } from 'lucide-react';
 import { useAppData } from '../contexts/DataContext';
 import { canAccessRolePortal } from '../lib/api';
-import { RoleBadge } from '../components/StatusBadges';
 import type { UserRole } from '../types/database';
+
+const PORTALS: {
+  index: string;
+  role: UserRole;
+  title: string;
+  eyebrow: string;
+  summary: string;
+  icon: typeof LayoutDashboard;
+  featured?: boolean;
+}[] = [
+  {
+    index: '01',
+    role: 'employee',
+    title: 'Employee Portal',
+    eyebrow: 'Staff Self-Service',
+    summary:
+      'File digital Leave, Overtime, Official Business, Cash Advance, and Expense Reimbursement slips with receipt uploads and e-signatures.',
+    icon: LayoutDashboard,
+  },
+  {
+    index: '02',
+    role: 'hr',
+    title: 'HR Admin',
+    eyebrow: 'Stage 1 · People Ops',
+    summary:
+      'Review and approve HR requests before routing to Boss, manage leave credits, send staff invitations, and export printable history archives.',
+    icon: Users,
+  },
+  {
+    index: '03',
+    role: 'accounting',
+    title: 'Accounting Admin',
+    eyebrow: 'Stage 1 · Finance & Payroll',
+    summary:
+      'Inspect BIR official receipts, verify reimbursement and cash advance claims, audit overtime payroll, and forward cleared slips to Boss.',
+    icon: Calculator,
+  },
+  {
+    index: '04',
+    role: 'boss',
+    title: 'Boss Executive',
+    eyebrow: 'Stage 2 · Final Sign-Off',
+    summary:
+      'Issue final executive digital sign-off that permanently locks records in History, manage CEO / COO & staff invitations, and archive company exports.',
+    icon: ShieldCheck,
+    featured: true,
+  },
+];
+
+const ROLE_LABELS: Record<UserRole, string> = {
+  employee: 'Employee',
+  hr: 'HR Admin',
+  accounting: 'Accounting',
+  boss: 'Boss Executive',
+};
 
 export function PortalGatewayPage() {
   const navigate = useNavigate();
@@ -24,268 +76,212 @@ export function PortalGatewayPage() {
       if (canAccessRolePortal(activeProfile.role, role)) {
         navigate(`/${role}`);
       }
-      return; // Strictly blocked from opening other portals while signed in
+      return;
     }
     navigate(`/${role}/login`);
   };
 
-  const portals: {
-    role: UserRole;
-    path: string;
-    title: string;
-    subtitle: string;
-    audience: string;
-    features: string[];
-    icon: typeof LayoutDashboard;
-    accentBorder: string;
-    accentBg: string;
-    btnClass: string;
-  }[] = [
-    {
-      role: 'employee',
-      path: '/employee',
-      title: 'Employee Portal',
-      subtitle: 'Paperless Staff Self-Service',
-      audience: 'All MediQ Employees & Field Specialists',
-      features: [
-        'Digital Leave, Overtime, Reimbursement & Official Business forms',
-        'Built-in Draw/Type E-Signature & Receipt Photo Upload',
-        'Live VL / SL / EL Leave Credits & Printable PDF Form Slips',
-      ],
-      icon: LayoutDashboard,
-      accentBorder: 'hover:border-sky-400',
-      accentBg: 'from-sky-500 to-cyan-600',
-      btnClass: 'bg-sky-600 hover:bg-sky-700 text-white',
-    },
-    {
-      role: 'boss',
-      path: '/boss',
-      title: 'Boss Executive Admin',
-      subtitle: 'Executive Approval Command',
-      audience: 'Managing Director / Executive Approver',
-      features: [
-        '1-Click Final Digital Sign-Off across all company requests',
-        'Live Pending Spend & Company Digital Forms Mix analytics',
-        'Assign & manage HR Admin, Accounting & Executive roles',
-      ],
-      icon: ShieldCheck,
-      accentBorder: 'hover:border-amber-400',
-      accentBg: 'from-amber-500 to-orange-600',
-      btnClass: 'bg-[#0a192f] hover:bg-slate-800 text-amber-300',
-    },
-    {
-      role: 'hr',
-      path: '/hr',
-      title: 'HR Admin Portal',
-      subtitle: 'People Operations & Leave Management',
-      audience: 'Human Resources & Admin Department',
-      features: [
-        'Dedicated Queue for Leave, Overtime, Official Business & HR Docs',
-        'Employee Directory & Annual Leave Credits Editor',
-        'Company Memos & Holiday Advisory Publisher',
-      ],
-      icon: Users,
-      accentBorder: 'hover:border-violet-400',
-      accentBg: 'from-violet-600 to-indigo-600',
-      btnClass: 'bg-violet-600 hover:bg-violet-700 text-white',
-    },
-    {
-      role: 'accounting',
-      path: '/accounting',
-      title: 'Accounting Admin Portal',
-      subtitle: 'Reimbursements, Cash Advances & Payroll',
-      audience: 'Finance & Accounting Department',
-      features: [
-        'Verify BIR Official Receipts & itemized PHP expense claims',
-        'Mark Disbursed / Paid with Bank, GCash or Check Ref #',
-        'Approved Overtime Payroll Queue & CSV Finance Exports',
-      ],
-      icon: Calculator,
-      accentBorder: 'hover:border-emerald-400',
-      accentBg: 'from-emerald-600 to-teal-600',
-      btnClass: 'bg-emerald-600 hover:bg-emerald-700 text-white',
-    },
-  ];
-
   return (
-    <div className="min-h-screen bg-slate-50">
-      {/* Corporate Hero Header */}
-      <div className="relative overflow-hidden bg-[#071326] text-white">
-        <div
-          className="pointer-events-none absolute -top-32 right-0 h-96 w-96 rounded-full opacity-25 blur-3xl"
-          style={{ background: 'radial-gradient(circle, #38bdf8 0%, transparent 70%)' }}
-        />
-        <div
-          className="pointer-events-none absolute -bottom-32 -left-16 h-80 w-80 rounded-full opacity-20 blur-3xl"
-          style={{ background: 'radial-gradient(circle, #06b6d4 0%, transparent 70%)' }}
-        />
+    <div
+      className="flex min-h-[100dvh] flex-col bg-[#060e1c] text-[#f5efe4]"
+      style={{ fontFamily: "'Plus Jakarta Sans', system-ui, -apple-system, sans-serif" }}
+    >
+      {/* Midnight Navy Top Bar */}
+      <header className="w-full border-b border-[#203456] bg-[#0b172b]">
+        <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-5 py-4 sm:px-8">
+          <div className="flex shrink-0 items-center gap-3.5">
+            <img
+              src="./brand/mediq-logo-white.png"
+              alt="MediQ Pharma"
+              className="h-7 w-auto shrink-0 object-contain sm:h-8"
+            />
+            <span className="hidden h-5 w-px bg-[#203456] sm:block" aria-hidden="true" />
+            <span className="hidden text-xs font-medium text-[#b7afa2] sm:block">
+              Internal Forms &amp; Approval Workspace
+            </span>
+          </div>
 
-        <div className="relative z-10 mx-auto max-w-6xl px-4 py-6 sm:px-6">
-          <div className="flex flex-wrap items-center justify-between gap-4 border-b border-white/10 pb-5">
-            <div className="flex items-center gap-3.5">
-              <img
-                src="./brand/mediq-logo-white.png"
-                alt="MediQ Pharma"
-                className="h-9 w-auto object-contain"
-              />
-              <div className="border-l border-white/15 pl-3.5">
-                <p className="text-[10px] font-bold tracking-widest text-sky-400 uppercase">
-                  MediQ Pharma Philippines
-                </p>
-                <p className="text-sm font-bold text-white">Paperless Digital Forms Platform</p>
+          {activeProfile ? (
+            <div className="flex items-center gap-2.5">
+              <div className="hidden text-right sm:block">
+                <p className="text-xs font-semibold text-[#f5efe4]">{activeProfile.full_name}</p>
+                <p className="text-[11px] text-[#948e84]">{ROLE_LABELS[activeProfile.role]}</p>
               </div>
+              <button
+                type="button"
+                onClick={() => navigate(`/${activeProfile.role}`)}
+                className="inline-flex cursor-pointer items-center gap-1.5 rounded-full bg-gradient-to-b from-[#29508f] to-[#142e5c] px-3.5 py-2 text-xs font-semibold text-[#f7f2e8] transition hover:brightness-110"
+              >
+                Open Workspace
+                <ArrowUpRight className="h-3.5 w-3.5" />
+              </button>
+              <button
+                type="button"
+                onClick={() => void logoutAll()}
+                className="inline-flex cursor-pointer items-center gap-1.5 rounded-full border border-[#283f66] bg-[#11213c] px-3 py-2 text-xs font-semibold text-[#b7afa2] transition hover:border-[#d9c7a7]/60 hover:text-[#f5efe4]"
+              >
+                <LogOut className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">Sign Out</span>
+              </button>
+            </div>
+          ) : (
+            <span className="text-[11px] font-semibold tracking-[0.06em] text-[#948e84] uppercase">
+              MediQ Pharma · Philippines
+            </span>
+          )}
+        </div>
+      </header>
+
+      {/* Main Dark Midnight Navy Workspace Selector */}
+      <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col justify-center px-5 py-6 sm:px-8 sm:py-8">
+        {/* Midnight Navy Architectural Hero Card */}
+        <section
+          className="relative mb-5 overflow-hidden rounded-[26px] border border-[#283f66] px-6 py-6 text-[#f5efe4] shadow-[0_24px_56px_-24px_rgba(0,0,0,0.75)] sm:px-8 sm:py-7"
+          style={{
+            background:
+              'radial-gradient(95% 130% at 96% 12%, rgba(217,199,167,0.16), transparent 55%), linear-gradient(145deg, #163362 0%, #0f2942 54%, #0b172b 100%)',
+          }}
+        >
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-0 opacity-[0.06]"
+            style={{
+              backgroundImage:
+                'linear-gradient(to right, #f5efe4 1px, transparent 1px), linear-gradient(to bottom, #f5efe4 1px, transparent 1px)',
+              backgroundSize: '36px 36px',
+            }}
+          />
+
+          <div className="relative z-10 flex flex-col justify-between gap-5 lg:flex-row lg:items-end">
+            <div className="max-w-2xl">
+              <p className="text-[11px] font-bold tracking-[0.16em] text-[#d9c7a7] uppercase">
+                Paperless Operations
+              </p>
+              <h1 className="mt-2 text-2xl font-semibold leading-[1.14] tracking-[-0.03em] text-[#f5efe4] sm:text-[34px] lg:text-[36px]">
+                Select your MediQ workspace.
+              </h1>
+              <p className="mt-2 text-sm leading-relaxed text-[#b7afa2] sm:text-[14.5px]">
+                Sign in to your assigned portal below. Every form follows sequential approval and is
+                permanently archived once signed by Executive leadership.
+              </p>
             </div>
 
-            {activeProfile ? (
-              <div className="flex items-center gap-2.5">
-                <div className="hidden text-right sm:block">
-                  <p className="text-xs font-bold text-white">{activeProfile.full_name}</p>
-                  <p className="text-[10px] text-emerald-300">Live Supabase Session</p>
-                </div>
-                <RoleBadge role={activeProfile.role} />
-                <button
-                  type="button"
-                  onClick={() => logoutAll()}
-                  className="inline-flex items-center gap-1.5 rounded-xl border border-white/20 bg-white/10 px-3 py-1.5 text-xs font-bold text-white transition hover:bg-rose-500/20 hover:text-rose-200"
-                >
-                  <LogOut className="h-3.5 w-3.5" />
-                  Sign Out
-                </button>
+            <div className="flex shrink-0 items-center gap-5 border-t border-white/12 pt-4 sm:gap-6 lg:border-t-0 lg:border-l lg:pl-7 lg:pt-0">
+              <div>
+                <p className="text-lg font-semibold tracking-tight text-[#f5efe4] sm:text-xl">4</p>
+                <p className="text-[11px] text-[#b7afa2]">Role Portals</p>
               </div>
-            ) : (
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-1.5 text-xs font-semibold text-sky-300 ring-1 ring-white/15">
-                <Lock className="h-3.5 w-3.5" />
-                Role-Protected Login Required
-              </span>
-            )}
+              <div className="h-7 w-px bg-white/12" aria-hidden="true" />
+              <div>
+                <p className="text-lg font-semibold tracking-tight text-[#f5efe4] sm:text-xl">6</p>
+                <p className="text-[11px] text-[#b7afa2]">Digital Forms</p>
+              </div>
+              <div className="h-7 w-px bg-white/12" aria-hidden="true" />
+              <div>
+                <p className="text-lg font-semibold tracking-tight text-[#d9c7a7] sm:text-xl">
+                  Locked
+                </p>
+                <p className="text-[11px] text-[#b7afa2]">Audit History</p>
+              </div>
+            </div>
           </div>
+        </section>
 
-          <div className="py-10 sm:py-12">
-            <p className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-1 text-[11px] font-semibold text-sky-300">
-              <FileCheck2 className="h-3.5 w-3.5" />
-              One Link · 4 Separate Role-Dedicated Portals
-            </p>
-            <h1 className="mt-4 max-w-2xl text-3xl font-extrabold tracking-tight sm:text-4xl">
-              Select Your MediQ Portal to Sign In
-            </h1>
-            <p className="mt-3 max-w-2xl text-sm leading-relaxed text-slate-300">
-              Choose whether you are signing in as an <strong>Employee</strong>,{' '}
-              <strong>Boss Executive</strong>, <strong>HR Admin</strong>, or{' '}
-              <strong>Accounting Admin</strong>. Each portal has its own secure login and isolated
-              workspace.
-            </p>
-          </div>
-        </div>
-      </div>
-
-      {/* 4 Separate Portal Selector Cards */}
-      <div className="mx-auto -mt-8 max-w-6xl px-4 pb-16 sm:px-6">
-        <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
-          {portals.map((portal) => {
+        {/* 2x2 Midnight Navy Portal Cards */}
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          {PORTALS.map((portal) => {
             const Icon = portal.icon;
             const isUnlocked = Boolean(
               activeProfile && canAccessRolePortal(activeProfile.role, portal.role)
             );
             const isLockedByOtherSession = Boolean(activeProfile && !isUnlocked);
+            const isExecutive = Boolean(portal.featured);
+
             return (
-              <div
+              <button
                 key={portal.role}
-                className={`group relative flex flex-col justify-between overflow-hidden rounded-2xl border border-slate-200 bg-white p-6 shadow-md transition duration-200 ${
+                type="button"
+                disabled={isLockedByOtherSession}
+                onClick={() => openPortal(portal.role)}
+                className={`group relative flex flex-col justify-between rounded-[24px] p-5 text-left transition-all duration-200 sm:p-6 ${
                   isLockedByOtherSession
-                    ? 'opacity-60 grayscale-[35%]'
-                    : `hover:-translate-y-0.5 hover:shadow-xl ${portal.accentBorder}`
+                    ? 'cursor-not-allowed border border-[#203456]/60 bg-[#0b172b]/80 opacity-50'
+                    : isExecutive
+                      ? 'cursor-pointer border border-[#d9c7a7]/35 bg-[#11213c] text-[#f5efe4] shadow-[0_14px_30px_-16px_rgba(0,0,0,0.7)] hover:-translate-y-0.5 hover:border-[#d9c7a7]/70 hover:bg-[#152849]'
+                      : 'cursor-pointer border border-[#203456] bg-[#11213c] text-[#f5efe4] shadow-[0_14px_30px_-16px_rgba(0,0,0,0.65)] hover:-translate-y-0.5 hover:border-[#3c64a3] hover:bg-[#152849]'
                 }`}
               >
                 <div>
-                  <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-start justify-between gap-4">
                     <div className="flex items-center gap-3.5">
-                      <div
-                        className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br text-white shadow-sm ${portal.accentBg}`}
+                      <span
+                        className={`grid h-11 w-11 shrink-0 place-items-center rounded-2xl transition-colors ${
+                          isExecutive && !isLockedByOtherSession
+                            ? 'bg-[#d9c7a7] text-[#081428]'
+                            : 'bg-[#1a2f52] text-[#e5d5b7] group-hover:bg-gradient-to-b group-hover:from-[#29508f] group-hover:to-[#142e5c] group-hover:text-[#f7f2e8]'
+                        }`}
                       >
-                        <Icon className="h-6 w-6" />
-                      </div>
+                        <Icon className="h-5 w-5" strokeWidth={1.9} />
+                      </span>
                       <div>
-                        <h2 className="text-lg font-extrabold text-slate-900">{portal.title}</h2>
-                        <p className="text-xs font-medium text-slate-500">{portal.subtitle}</p>
+                        <p className="text-[11px] font-semibold tracking-[0.06em] text-[#948e84] uppercase">
+                          {portal.index} · {portal.eyebrow}
+                        </p>
+                        <h2 className="mt-0.5 text-xl font-semibold tracking-[-0.02em] text-[#f5efe4]">
+                          {portal.title}
+                        </h2>
                       </div>
                     </div>
 
-                    {isUnlocked ? (
-                      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-bold text-emerald-700 ring-1 ring-emerald-200">
-                        <CheckCircle2 className="h-3 w-3" />
-                        Your Active Portal
-                      </span>
-                    ) : isLockedByOtherSession ? (
-                      <span className="inline-flex items-center gap-1 rounded-full bg-rose-50 px-2.5 py-1 text-[11px] font-bold text-rose-700 ring-1 ring-rose-200">
-                        <Lock className="h-3 w-3" />
-                        Restricted
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-bold text-slate-600 ring-1 ring-slate-200">
-                        <Lock className="h-3 w-3" />
-                        Login Required
-                      </span>
-                    )}
-                  </div>
-
-                  <div className="mt-4 flex items-center justify-between rounded-xl bg-slate-50 px-3.5 py-2 text-xs">
-                    <span className="font-semibold text-slate-600">{portal.audience}</span>
-                    <span className="font-mono text-[11px] font-bold text-slate-400">
-                      {portal.path}
+                    <span
+                      className={`grid h-9 w-9 shrink-0 place-items-center rounded-full transition-transform duration-200 ${
+                        isLockedByOtherSession
+                          ? 'border border-[#203456] text-[#6c7b96]'
+                          : isExecutive
+                            ? 'bg-[#d9c7a7] text-[#081428] group-hover:rotate-45'
+                            : 'border border-[#283f66] bg-[#0b172b] text-[#e5d5b7] group-hover:rotate-45 group-hover:border-[#29508f] group-hover:bg-[#29508f] group-hover:text-[#f7f2e8]'
+                      }`}
+                    >
+                      {isLockedByOtherSession ? (
+                        <Lock className="h-4 w-4" />
+                      ) : (
+                        <ArrowUpRight className="h-4 w-4" />
+                      )}
                     </span>
                   </div>
 
-                  <ul className="mt-4 space-y-2">
-                    {portal.features.map((feat) => (
-                      <li key={feat} className="flex items-start gap-2 text-xs text-slate-600">
-                        <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-slate-400" />
-                        <span>{feat}</span>
-                      </li>
-                    ))}
-                  </ul>
+                  <p className="mt-4 text-sm leading-relaxed text-[#b7afa2]">{portal.summary}</p>
                 </div>
 
-                <div className="mt-6 flex items-center justify-between border-t border-slate-100 pt-4">
-                  <span className="text-[11px] font-medium text-slate-400">
+                <div className="mt-5 flex items-center justify-between border-t border-[#203456] pt-3.5 text-xs font-semibold text-[#e5d5b7]">
+                  <span>
                     {isUnlocked
-                      ? 'Authorized session active'
+                      ? 'Continue to active session'
                       : isLockedByOtherSession
-                        ? 'Sign out first to switch accounts'
-                        : 'Work email & password required'}
+                        ? 'Sign out to switch roles'
+                        : `Sign in to ${portal.title}`}
                   </span>
-                  <button
-                    type="button"
-                    disabled={isLockedByOtherSession}
-                    onClick={() => openPortal(portal.role)}
-                    className={`inline-flex items-center gap-1.5 rounded-xl px-4 py-2.5 text-xs font-bold shadow-xs transition ${
-                      isLockedByOtherSession
-                        ? 'cursor-not-allowed bg-slate-200 text-slate-500'
-                        : portal.btnClass
-                    }`}
-                  >
-                    {isUnlocked ? (
-                      <>
-                        Enter {portal.title}
-                        <ArrowRight className="h-3.5 w-3.5 transition group-hover:translate-x-0.5" />
-                      </>
-                    ) : isLockedByOtherSession ? (
-                      <>
-                        <Lock className="h-3.5 w-3.5" />
-                        Access Locked
-                      </>
-                    ) : (
-                      <>
-                        Sign In to {portal.title}
-                        <ArrowRight className="h-3.5 w-3.5 transition group-hover:translate-x-0.5" />
-                      </>
-                    )}
-                  </button>
+                  <span className="text-[11px] font-medium text-[#948e84]">
+                    {isUnlocked
+                      ? 'Active'
+                      : isLockedByOtherSession
+                        ? 'Restricted'
+                        : isExecutive
+                          ? 'CEO & COO Access'
+                          : 'Authorized email'}
+                  </span>
                 </div>
-              </div>
+              </button>
             );
           })}
         </div>
-      </div>
+      </main>
+
+      {/* Quiet Footer */}
+      <footer className="border-t border-[#203456] px-5 py-4 text-center text-[11.5px] text-[#948e84] sm:px-8">
+        MediQ Pharma &amp; Medical Supplies Distribution · Authorized Staff Portal · Role-Isolated
+        Access
+      </footer>
     </div>
   );
 }

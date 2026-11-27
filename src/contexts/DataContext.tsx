@@ -12,6 +12,7 @@ import {
   fetchFormRequests,
   fetchRequestActivityLogs,
   fetchRequestAttachments,
+  notifyFormEvent,
   reviewFormRequest as apiReviewFormRequest,
   updateProfile as apiUpdateProfile,
   upsertLeaveBalance as apiUpsertLeaveBalance,
@@ -50,7 +51,15 @@ interface DataContextValue {
     updates: Partial<
       Pick<
         Profile,
-        'full_name' | 'department' | 'position' | 'phone' | 'role' | 'is_active' | 'employee_code' | 'signature_data'
+        | 'full_name'
+        | 'department'
+        | 'position'
+        | 'phone'
+        | 'role'
+        | 'is_active'
+        | 'employee_code'
+        | 'avatar_url'
+        | 'signature_data'
       >
     >
   ) => Promise<void>;
@@ -192,6 +201,10 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const submitForm = useCallback(
     async (input: CreateFormRequestInput, files: File[]): Promise<FormRequest> => {
       const created = await apiCreateFormRequest(input, files);
+      // Fire-and-forget live Google email notification to all active Bosses (+ Stage 1 HR/Accounting)
+      void notifyFormEvent(created.id, 'submitted').catch((err) => {
+        console.warn('Form submission email notification warning:', err);
+      });
       await refreshAll();
       return created;
     },
@@ -206,6 +219,28 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       disbursementReference?: string;
     }) => {
       await apiReviewFormRequest(params);
+      // Dispatch live Google email alerts on Stage-1 clearance (-> Boss), Boss Approval (-> Employee), or Rejection
+      if (
+        params.action === 'hr_endorse' ||
+        params.action === 'hr_approve' ||
+        params.action === 'accounting_verify'
+      ) {
+        void notifyFormEvent(params.requestId, 'stage1_approved').catch((err) => {
+          console.warn('Stage 1 email notification warning:', err);
+        });
+      } else if (params.action === 'boss_approve') {
+        void notifyFormEvent(params.requestId, 'boss_approved').catch((err) => {
+          console.warn('Boss approval email notification warning:', err);
+        });
+      } else if (
+        params.action === 'hr_reject' ||
+        params.action === 'accounting_reject' ||
+        params.action === 'boss_reject'
+      ) {
+        void notifyFormEvent(params.requestId, 'rejected').catch((err) => {
+          console.warn('Rejection email notification warning:', err);
+        });
+      }
       await refreshAll();
     },
     [refreshAll]
@@ -217,7 +252,15 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       updates: Partial<
         Pick<
           Profile,
-          'full_name' | 'department' | 'position' | 'phone' | 'role' | 'is_active' | 'employee_code' | 'signature_data'
+          | 'full_name'
+          | 'department'
+          | 'position'
+          | 'phone'
+          | 'role'
+          | 'is_active'
+          | 'employee_code'
+          | 'avatar_url'
+          | 'signature_data'
         >
       >
     ) => {

@@ -37,6 +37,7 @@ import {
   LayoutDashboard,
   Loader2,
   LogOut,
+  Megaphone,
   Moon,
   Palette,
   PenTool,
@@ -59,6 +60,8 @@ import {
   formatDate,
   formatPHP,
 } from "@/lib/constants";
+import { HrMemosBoardView } from "@/components/HrMemosBoardView";
+import { ProfileAvatarUploader } from "@/components/ProfileAvatarUploader";
 import { SignaturePad } from "@/components/SignaturePad";
 import { RequestTypeBadge, RequestTypeIcon } from "@/components/StatusBadges";
 import { EmployeeFormsDatatable } from "@/components/ui/employee-forms-datatable";
@@ -67,11 +70,11 @@ import {
   PortalSearchBar,
   matchesRequestSearch,
 } from "@/components/ui/portal-search-bar";
-import type { FormRequest, Profile, RequestType } from "@/types/database";
+import type { Announcement, FormRequest, Profile, RequestType } from "@/types/database";
 
 /* ------------------------------------------------------------------ types */
 
-type AcctView = "dashboard" | "claims" | "overtime" | "disbursed" | "settings";
+type AcctView = "dashboard" | "claims" | "overtime" | "disbursed" | "memos" | "settings";
 type Theme = "light" | "dark";
 type ClaimsFilter = "all" | "verify" | "ready" | "paid";
 type OtFilter = "all" | "pending" | "paid";
@@ -120,6 +123,7 @@ const NAV_GROUPS: { id: string; label: string; items: NavItem[] }[] = [
       { id: "claims", label: "Reimbursements & CA", icon: Receipt },
       { id: "overtime", label: "Overtime Payroll", icon: Clock },
       { id: "disbursed", label: "Disbursed Ledger", icon: FileSpreadsheet },
+      { id: "memos", label: "HR Memos", icon: Megaphone },
     ],
   },
   {
@@ -269,15 +273,22 @@ function AvatarCircle({
   name,
   tint = "#e6dac6",
   size = 44,
+  avatarUrl,
 }: {
   name: string;
   tint?: string;
   size?: number;
+  avatarUrl?: string | null;
 }) {
+  const [imgFailed, setImgFailed] = useState(false);
+  useEffect(() => {
+    setImgFailed(false);
+  }, [avatarUrl]);
+  const showPhoto = Boolean(avatarUrl && !imgFailed);
   return (
     <span
       aria-hidden="true"
-      className="grid flex-none place-items-center rounded-full font-semibold tracking-[0.02em] text-[#0d1c36]"
+      className="grid flex-none place-items-center overflow-hidden rounded-full font-semibold tracking-[0.02em] text-[#0d1c36]"
       style={{
         width: size,
         height: size,
@@ -285,7 +296,16 @@ function AvatarCircle({
         fontSize: Math.round(size * 0.32),
       }}
     >
-      {initials(name)}
+      {showPhoto ? (
+        <img
+          src={avatarUrl!}
+          alt=""
+          onError={() => setImgFailed(true)}
+          className="h-full w-full object-cover"
+        />
+      ) : (
+        initials(name)
+      )}
     </span>
   );
 }
@@ -1125,7 +1145,7 @@ function AccountingSettingsView({
   onAccent: (hex: string) => void;
   onToast: (msg: string) => void;
 }) {
-  const { saveProfile } = useAppData();
+  const { saveProfile, refreshAll } = useAppData();
   const { toast } = useToast();
   const [tab, setTab] = useState<SetTab>("profile");
   const [fullName, setFullName] = useState(profile?.full_name ?? "");
@@ -1239,21 +1259,27 @@ function AccountingSettingsView({
             >
               {tab === "profile" ? (
                 <form onSubmit={handleSave} className="space-y-6">
-                  <div className="flex flex-wrap items-center gap-4">
-                    <AvatarCircle
-                      name={fullName || profile?.full_name || "Accounting"}
-                      tint="#e6dac6"
-                      size={60}
+                  {profile ? (
+                    <ProfileAvatarUploader
+                      profileId={profile.id}
+                      fullName={fullName || profile.full_name || "Accounting"}
+                      subtitle={`${profile.employee_code ?? ""} · ${profile.email}`}
+                      heading="Finance Profile & Verification E-Signature"
+                      avatarUrl={profile.avatar_url}
+                      onUploaded={async () => {
+                        await refreshAll();
+                      }}
                     />
-                    <div className="min-w-0">
-                      <h2 className="text-[20px] font-semibold tracking-[-0.02em]">
-                        Finance Profile &amp; Verification E-Signature
-                      </h2>
-                      <p className="mt-0.5 text-[14px] text-muted-foreground">
-                        {profile?.employee_code} · {profile?.email}
-                      </p>
+                  ) : (
+                    <div className="flex flex-wrap items-center gap-4">
+                      <AvatarCircle name={fullName || "Accounting"} tint="#e6dac6" size={60} />
+                      <div className="min-w-0">
+                        <h2 className="text-[20px] font-semibold tracking-[-0.02em]">
+                          Finance Profile &amp; Verification E-Signature
+                        </h2>
+                      </div>
                     </div>
-                  </div>
+                  )}
 
                   <div className="grid gap-4 sm:grid-cols-2">
                     <label className={labelCls}>
@@ -1298,8 +1324,8 @@ function AccountingSettingsView({
                     </label>
                   </div>
 
-                  <div className="rounded-2xl border border-border bg-white p-4 text-slate-900">
-                    <p className="mb-3 text-xs font-semibold text-slate-600">
+                  <div className="rounded-2xl border border-border bg-card p-4 text-foreground">
+                    <p className="mb-3 text-xs font-semibold text-muted-foreground">
                       Default Accounting Verification Stamp (appears on verified &amp; paid digital
                       vouchers)
                     </p>
@@ -1307,6 +1333,7 @@ function AccountingSettingsView({
                       signerName={fullName || profile?.full_name || "Accounting Admin"}
                       initialSignature={signatureData || null}
                       onChange={handleSigChange}
+                      adaptiveTheme
                     />
                   </div>
 
@@ -1397,6 +1424,8 @@ function Sidebar({
   dark,
   pendingVerifyCount,
   pendingOtCount,
+  unreadMemos,
+  totalMemos,
   paidPct,
   hasSignature,
   onQuickAction,
@@ -1407,6 +1436,8 @@ function Sidebar({
   dark: boolean;
   pendingVerifyCount: number;
   pendingOtCount: number;
+  unreadMemos: number;
+  totalMemos: number;
   paidPct: number;
   hasSignature: boolean;
   onQuickAction: () => void;
@@ -1507,6 +1538,20 @@ function Sidebar({
                           className="ml-auto rounded-md bg-[var(--fy-950)] px-[7px] py-0.5 text-[10.5px] font-semibold text-[#f5efe4]"
                         >
                           {badgeCount}
+                        </motion.span>
+                      ) : n.id === "memos" && (unreadMemos > 0 || totalMemos > 0) ? (
+                        <motion.span
+                          key={`${unreadMemos}-${totalMemos}`}
+                          initial={{ scale: 0.6 }}
+                          animate={{ scale: 1 }}
+                          transition={{ type: "spring", bounce: 0, duration: 0.45 }}
+                          className={`ml-auto rounded-md px-[7px] py-0.5 text-[10.5px] font-semibold ${
+                            unreadMemos > 0
+                              ? "bg-[var(--fy-rose)] text-[#081428]"
+                              : "bg-[var(--fy-soft)] text-[var(--fy-text)]"
+                          }`}
+                        >
+                          {unreadMemos > 0 ? `${unreadMemos} new` : totalMemos}
                         </motion.span>
                       ) : null}
                     </button>
@@ -1773,16 +1818,22 @@ function TabBar({
 
 function AcctNotificationTray({
   pendingItems,
+  announcements,
+  seenMemoIds,
   readIds,
   onMarkAllRead,
   onInspect,
+  onOpenMemo,
   onClose,
   bellRef,
 }: {
   pendingItems: FormRequest[];
+  announcements: Announcement[];
+  seenMemoIds: Set<number>;
   readIds: Set<string>;
   onMarkAllRead: () => void;
   onInspect: (req: FormRequest) => void;
+  onOpenMemo: (ann: Announcement) => void;
   onClose: () => void;
   bellRef: RefObject<HTMLButtonElement | null>;
 }) {
@@ -1818,8 +1869,8 @@ function AcctNotificationTray({
       className="fixed inset-x-3 top-[76px] z-50 origin-top-right rounded-[20px] bg-card p-4 shadow-[var(--fy-pop)] sm:absolute sm:inset-x-auto sm:right-[-8px] sm:top-[calc(100%+12px)] sm:w-[360px]"
     >
       <div className="mb-2.5 flex items-center justify-between">
-        <p className="font-semibold">Pending Finance &amp; Payroll</p>
-        {pendingItems.length > 0 ? (
+        <p className="font-semibold">Finance Alerts &amp; HR Memos</p>
+        {pendingItems.length > 0 || announcements.length > 0 ? (
           <button
             type="button"
             onClick={onMarkAllRead}
@@ -1829,12 +1880,39 @@ function AcctNotificationTray({
           </button>
         ) : null}
       </div>
-      {pendingItems.length === 0 ? (
+      {pendingItems.length === 0 && announcements.length === 0 ? (
         <p className="rounded-[14px] bg-muted p-4 text-center text-xs text-muted-foreground">
-          All caught up — zero claims or OT slips awaiting verification.
+          All caught up — zero claims, OT slips, or unread HR memos.
         </p>
       ) : (
-        <ul className="grid max-h-[340px] gap-1 overflow-y-auto">
+        <ul className="grid max-h-[360px] gap-1 overflow-y-auto">
+          {announcements.slice(0, 4).map((ann) => (
+            <li key={`memo-${ann.id}`}>
+              <button
+                type="button"
+                onClick={() => {
+                  onOpenMemo(ann);
+                  onClose();
+                }}
+                className={`fy-focus flex w-full cursor-pointer items-start gap-3 rounded-[14px] p-2.5 text-left text-[13.5px] leading-[1.4] text-muted-foreground transition-colors hover:bg-muted ${
+                  !seenMemoIds.has(ann.id) ? "bg-[var(--fy-soft)]" : ""
+                }`}
+              >
+                <span className="grid h-9 w-9 flex-none place-items-center rounded-full bg-[#d9c7a7] text-[#081428]">
+                  <Megaphone className="h-4 w-4" />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <b className="font-semibold text-foreground">
+                    {ann.author?.full_name ?? "HR Admin"}
+                  </b>{" "}
+                  posted memo <b className="font-semibold text-foreground">{ann.title}</b>
+                  <span className="mt-0.5 block text-xs text-[var(--fy-faint)]">
+                    HR Memo · {formatDate(ann.created_at)}
+                  </span>
+                </span>
+              </button>
+            </li>
+          ))}
           {pendingItems.slice(0, 6).map((req) => (
             <li key={req.id}>
               <button
@@ -1851,6 +1929,7 @@ function AcctNotificationTray({
                   name={req.employee?.full_name || "Staff"}
                   tint="#e6dac6"
                   size={36}
+                  avatarUrl={req.employee?.avatar_url}
                 />
                 <span className="min-w-0 flex-1">
                   <b className="font-semibold text-foreground">
@@ -1879,21 +1958,21 @@ export function MediqAccountingDashboard({
   onInspect,
 }: MediqAccountingDashboardProps) {
   const { signOut } = useAuth();
-  const { activeProfile: profile, performReview } = useAppData();
+  const { activeProfile: profile, announcements, performReview } = useAppData();
   const { toast } = useToast();
 
   const [theme, setTheme] = useState<Theme>(() => {
     try {
-      return localStorage.getItem("mediq-acct-theme") === "dark" ? "dark" : "light";
+      return localStorage.getItem("mediq-portal-theme-v2") === "light" ? "light" : "dark";
     } catch {
-      return "light";
+      return "dark";
     }
   });
   const [accent, setAccent] = useState<string>(() => {
     try {
-      return localStorage.getItem("mediq-acct-accent") || "#163362";
+      return localStorage.getItem("mediq-portal-accent-v2") || "#0f2942";
     } catch {
-      return "#163362";
+      return "#0f2942";
     }
   });
 
@@ -1903,6 +1982,43 @@ export function MediqAccountingDashboard({
   const [otFilter, setOtFilter] = useState<OtFilter>("all");
   const [tray, setTray] = useState(false);
   const [readIds, setReadIds] = useState<Set<string>>(() => new Set());
+  const [seenMemoIds, setSeenMemoIds] = useState<Set<number>>(() => {
+    try {
+      const raw = localStorage.getItem(`mediq-seen-memos-${profile?.id ?? "acct"}`);
+      const arr = raw ? (JSON.parse(raw) as number[]) : [];
+      return new Set(Array.isArray(arr) ? arr : []);
+    } catch {
+      return new Set();
+    }
+  });
+  const prevMemoIdsRef = useRef<Set<number> | null>(null);
+  const persistSeenMemos = useCallback(
+    (next: Set<number>) => {
+      setSeenMemoIds(next);
+      try {
+        localStorage.setItem(
+          `mediq-seen-memos-${profile?.id ?? "acct"}`,
+          JSON.stringify(Array.from(next))
+        );
+      } catch {
+        // ignore
+      }
+    },
+    [profile?.id]
+  );
+  const markAllMemosRead = useCallback(() => {
+    const next = new Set(seenMemoIds);
+    for (const a of announcements) next.add(a.id);
+    persistSeenMemos(next);
+  }, [announcements, seenMemoIds, persistSeenMemos]);
+  useEffect(() => {
+    const cur = new Set(announcements.map((a) => a.id));
+    if (prevMemoIdsRef.current !== null) {
+      const newest = announcements.find((a) => !prevMemoIdsRef.current!.has(a.id));
+      if (newest) setToastMsg({ id: Date.now(), msg: `New HR Memo: ${newest.title}` });
+    }
+    prevMemoIdsRef.current = cur;
+  }, [announcements]);
   const [quickVerifyingId, setQuickVerifyingId] = useState<string | null>(null);
   const [toastMsg, setToastMsg] = useState<{ id: number; msg: string } | null>(null);
 
@@ -1910,15 +2026,19 @@ export function MediqAccountingDashboard({
 
   useEffect(() => {
     try {
-      localStorage.setItem("mediq-acct-theme", theme);
+      localStorage.setItem("mediq-portal-theme-v2", theme);
     } catch {
       // ignore
+    }
+    if (typeof document !== "undefined") {
+      document.documentElement.classList.toggle("dark", theme === "dark");
+      document.documentElement.classList.toggle("fy-light", theme === "light");
     }
   }, [theme]);
 
   useEffect(() => {
     try {
-      localStorage.setItem("mediq-acct-accent", accent);
+      localStorage.setItem("mediq-portal-accent-v2", accent);
     } catch {
       // ignore
     }
@@ -2121,7 +2241,13 @@ export function MediqAccountingDashboard({
     return src.filter((r) => matchesRequestSearch(r, q)).slice(0, 5);
   }, [pendingAllAcct, allAcctRequests, q]);
 
-  const hasUnread = pendingAllAcct.some((r) => !readIds.has(r.id));
+  const unreadMemosCount = useMemo(
+    () => announcements.filter((a) => !seenMemoIds.has(a.id)).length,
+    [announcements, seenMemoIds]
+  );
+  const unreadNoticeCount =
+    pendingAllAcct.filter((r) => !readIds.has(r.id)).length + unreadMemosCount;
+  const hasUnread = unreadNoticeCount > 0;
 
   /* Live Actions */
   const handleQuickVerify = async (req: FormRequest) => {
@@ -2169,6 +2295,8 @@ export function MediqAccountingDashboard({
             dark={dark}
             pendingVerifyCount={pendingVerifyList.length}
             pendingOtCount={pendingOtList.length}
+            unreadMemos={unreadMemosCount}
+            totalMemos={announcements.length}
             paidPct={paidPct}
             hasSignature={hasSignature}
             onQuickAction={() => go(hasSignature ? "disbursed" : "settings")}
@@ -2246,8 +2374,10 @@ export function MediqAccountingDashboard({
                           animate={{ scale: 1 }}
                           exit={{ scale: 0 }}
                           aria-hidden="true"
-                          className="absolute right-[11px] top-[10px] h-2 w-2 rounded-full bg-[var(--fy-rose)] shadow-[0_0_0_2px_var(--card)] sm:right-[13px] sm:top-3"
-                        />
+                          className="absolute -right-0.5 -top-0.5 grid min-h-[18px] min-w-[18px] place-items-center rounded-full bg-[var(--fy-rose)] px-1 text-[10px] font-bold text-[#081428] shadow-[0_0_0_2px_var(--card)]"
+                        >
+                          {unreadNoticeCount > 9 ? "9+" : unreadNoticeCount}
+                        </motion.span>
                       ) : null}
                     </AnimatePresence>
                   </motion.button>
@@ -2255,12 +2385,21 @@ export function MediqAccountingDashboard({
                     {tray ? (
                       <AcctNotificationTray
                         pendingItems={pendingAllAcct}
+                        announcements={announcements}
+                        seenMemoIds={seenMemoIds}
                         readIds={readIds}
                         bellRef={bellRef}
                         onClose={() => setTray(false)}
-                        onMarkAllRead={() =>
-                          setReadIds(new Set(pendingAllAcct.map((r) => r.id)))
-                        }
+                        onMarkAllRead={() => {
+                          setReadIds(new Set(pendingAllAcct.map((r) => r.id)));
+                          markAllMemosRead();
+                        }}
+                        onOpenMemo={(ann) => {
+                          const next = new Set(seenMemoIds);
+                          next.add(ann.id);
+                          persistSeenMemos(next);
+                          go("memos");
+                        }}
                         onInspect={onInspect}
                       />
                     ) : null}
@@ -2273,7 +2412,7 @@ export function MediqAccountingDashboard({
                   aria-label={`Accounting profile for ${fullName}`}
                   className="fy-focus hidden cursor-pointer items-center gap-3 rounded-full py-0.5 pl-0.5 pr-2 text-left sm:flex"
                 >
-                  <AvatarCircle name={fullName} tint="#e6dac6" size={44} />
+                  <AvatarCircle name={fullName} tint="#e6dac6" size={44} avatarUrl={profile?.avatar_url} />
                   <span className="hidden xl:grid">
                     <span className="max-w-[180px] truncate text-[15px] font-medium leading-tight">
                       {fullName}
@@ -2912,6 +3051,13 @@ export function MediqAccountingDashboard({
                         />
                       </FyCard>
                     </>
+                  ) : view === "memos" ? (
+                    <HrMemosBoardView
+                      announcements={announcements}
+                      seenMemoIds={seenMemoIds}
+                      onMarkAllRead={markAllMemosRead}
+                      query={query}
+                    />
                   ) : (
                     <AccountingSettingsView
                       profile={profile}

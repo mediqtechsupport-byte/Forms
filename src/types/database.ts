@@ -33,6 +33,7 @@ export interface Profile {
   role: UserRole;
   hire_date: string;
   is_active: boolean;
+  avatar_url: string | null;
   signature_data: string | null;
   created_at: string;
   updated_at: string;

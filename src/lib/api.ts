@@ -18,16 +18,16 @@ import type {
 const REQUEST_SELECT = `
   *,
   employee:profiles!form_requests_employee_id_fkey (
-    id, employee_code, email, full_name, department, position, phone, role, hire_date, is_active, signature_data
+    id, employee_code, email, full_name, department, position, phone, role, hire_date, is_active, avatar_url, signature_data
   ),
   hr_reviewer:profiles!form_requests_hr_reviewed_by_fkey (
-    id, full_name, position, signature_data
+    id, full_name, position, avatar_url, signature_data
   ),
   boss_reviewer:profiles!form_requests_boss_reviewed_by_fkey (
-    id, full_name, position, signature_data
+    id, full_name, position, avatar_url, signature_data
   ),
   accounting_reviewer:profiles!form_requests_accounting_reviewed_by_fkey (
-    id, full_name, position, signature_data
+    id, full_name, position, avatar_url, signature_data
   )
 `;
 
@@ -55,7 +55,15 @@ export async function updateProfile(
   updates: Partial<
     Pick<
       Profile,
-      'full_name' | 'department' | 'position' | 'phone' | 'role' | 'is_active' | 'employee_code' | 'signature_data'
+      | 'full_name'
+      | 'department'
+      | 'position'
+      | 'phone'
+      | 'role'
+      | 'is_active'
+      | 'employee_code'
+      | 'avatar_url'
+      | 'signature_data'
     >
   >
 ): Promise<Profile> {
@@ -67,6 +75,89 @@ export async function updateProfile(
     .single();
   if (error) throw error;
   return data as Profile;
+}
+
+async function optimizeAvatarImage(file: File): Promise<{ blob: Blob; contentType: string; ext: string }> {
+  const mime = resolveAllowedMimeType(file);
+  if (!mime.startsWith('image/')) {
+    throw new Error('Please choose an image file (JPG, PNG, or WebP).');
+  }
+  if (file.size > 5 * 1024 * 1024) {
+    throw new Error('Image is larger than 5 MB. Please pick a smaller photo.');
+  }
+
+  // Center-crop to a clean 384x384 square JPEG for crisp, fast-loading avatars across all portals
+  try {
+    const objectUrl = URL.createObjectURL(file);
+    try {
+      const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+        const el = new Image();
+        el.onload = () => resolve(el);
+        el.onerror = () => reject(new Error('decode_failed'));
+        el.src = objectUrl;
+      });
+
+      const side = Math.min(img.naturalWidth || img.width, img.naturalHeight || img.height);
+      const sx = Math.max(0, Math.floor(((img.naturalWidth || img.width) - side) / 2));
+      const sy = Math.max(0, Math.floor(((img.naturalHeight || img.height) - side) / 2));
+
+      const targetSize = 384;
+      const canvas = document.createElement('canvas');
+      canvas.width = targetSize;
+      canvas.height = targetSize;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) throw new Error('no_ctx');
+
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = 'high';
+      ctx.drawImage(img, sx, sy, side, side, 0, 0, targetSize, targetSize);
+
+      const blob = await new Promise<Blob | null>((resolve) =>
+        canvas.toBlob((b) => resolve(b), 'image/jpeg', 0.88)
+      );
+      if (blob) {
+        return { blob, contentType: 'image/jpeg', ext: 'jpg' };
+      }
+    } finally {
+      URL.revokeObjectURL(objectUrl);
+    }
+  } catch {
+    // Fallback to original file if browser canvas cannot decode format (e.g. HEIC)
+  }
+
+  const ext = mime === 'image/png' ? 'png' : mime === 'image/webp' ? 'webp' : mime === 'image/heic' ? 'heic' : 'jpg';
+  return { blob: file, contentType: mime, ext };
+}
+
+export async function uploadProfileAvatar(profileId: string, file: File): Promise<Profile> {
+  const { blob, contentType, ext } = await optimizeAvatarImage(file);
+  const storagePath = `${profileId}/avatar.${ext}`;
+
+  const { error: uploadError } = await supabase.storage
+    .from('profile-avatars')
+    .upload(storagePath, blob, {
+      cacheControl: '3600',
+      upsert: true,
+      contentType,
+    });
+
+  if (uploadError) {
+    throw new Error(`Avatar upload failed: ${uploadError.message}`);
+  }
+
+  const { data: publicData } = supabase.storage.from('profile-avatars').getPublicUrl(storagePath);
+  const cacheBustedUrl = `${publicData.publicUrl}?v=${Date.now()}`;
+
+  return updateProfile(profileId, { avatar_url: cacheBustedUrl });
+}
+
+export async function removeProfileAvatar(profileId: string): Promise<Profile> {
+  const { data: listed } = await supabase.storage.from('profile-avatars').list(profileId);
+  if (listed && listed.length > 0) {
+    const paths = listed.map((item) => `${profileId}/${item.name}`);
+    await supabase.storage.from('profile-avatars').remove(paths);
+  }
+  return updateProfile(profileId, { avatar_url: null });
 }
 
 export async function fetchLeaveBalance(
@@ -441,6 +532,53 @@ export async function fetchStaffInvitations(): Promise<StaffInvitation[]> {
   return (data ?? []) as StaffInvitation[];
 }
 
+async function invokeAuthEdgeFunction<T>(
+  fnName: string,
+  body: Record<string, unknown>,
+  fallbackError: string
+): Promise<T> {
+  const getToken = async (forceRefresh = false): Promise<string> => {
+    if (forceRefresh) {
+      const { data: refreshed } = await supabase.auth.refreshSession();
+      if (refreshed.session?.access_token) return refreshed.session.access_token;
+    }
+    const { data: sessionData } = await supabase.auth.getSession();
+    const session = sessionData.session;
+    const expiresAtMs = (session?.expires_at ?? 0) * 1000;
+    if (!session?.access_token || expiresAtMs < Date.now() + 60_000) {
+      const { data: refreshed } = await supabase.auth.refreshSession();
+      if (refreshed.session?.access_token) return refreshed.session.access_token;
+    }
+    if (session?.access_token) return session.access_token;
+    throw new Error('Your session expired or changed in another tab. Please sign in again.');
+  };
+
+  let token = await getToken(false);
+  let res = await supabase.functions.invoke(fnName, {
+    body,
+    headers: { Authorization: `Bearer ${token}` },
+  });
+
+  // Auto-retry once with a freshly refreshed JWT on 401
+  const status =
+    res.error && typeof res.error === 'object' && 'context' in res.error && res.error.context instanceof Response
+      ? res.error.context.status
+      : null;
+
+  if (status === 401) {
+    token = await getToken(true);
+    res = await supabase.functions.invoke(fnName, {
+      body,
+      headers: { Authorization: `Bearer ${token}` },
+    });
+  }
+
+  if (res.error || (res.data && typeof res.data === 'object' && 'error' in res.data)) {
+    throw new Error(await extractFnError(res.data, res.error, fallbackError));
+  }
+  return res.data as T;
+}
+
 export async function sendStaffInvite(input: {
   full_name: string;
   email: string;
@@ -454,27 +592,19 @@ export async function sendStaffInvite(input: {
   email_sent: boolean;
   email_delivery_note: string;
 }> {
-  const { data, error } = await supabase.functions.invoke('send-staff-invite', {
-    body: { action: 'send', ...input },
-  });
-  if (error || (data && typeof data === 'object' && 'error' in data)) {
-    throw new Error(await extractFnError(data, error, 'Unable to send staff invitation.'));
-  }
-  return data as {
-    invitation: StaffInvitation;
-    accept_url: string;
-    email_sent: boolean;
-    email_delivery_note: string;
-  };
+  return invokeAuthEdgeFunction(
+    'send-staff-invite',
+    { action: 'send', ...input },
+    'Unable to send staff invitation.'
+  );
 }
 
 export async function revokeStaffInvite(invitationId: string): Promise<void> {
-  const { data, error } = await supabase.functions.invoke('send-staff-invite', {
-    body: { action: 'revoke', invitation_id: invitationId },
-  });
-  if (error || (data && typeof data === 'object' && 'error' in data)) {
-    throw new Error(await extractFnError(data, error, 'Unable to revoke invitation.'));
-  }
+  await invokeAuthEdgeFunction(
+    'send-staff-invite',
+    { action: 'revoke', invitation_id: invitationId },
+    'Unable to revoke invitation.'
+  );
 }
 
 export interface InvitePreview {
@@ -521,4 +651,28 @@ export async function declineStaffInvite(token: string): Promise<void> {
   if (error || (data && typeof data === 'object' && 'error' in data)) {
     throw new Error(await extractFnError(data, error, 'Unable to decline invitation.'));
   }
+}
+
+export type FormNotificationEvent = 'submitted' | 'stage1_approved' | 'boss_approved' | 'rejected';
+
+export async function notifyFormEvent(
+  requestId: string,
+  event: FormNotificationEvent,
+  portalBaseUrl?: string
+): Promise<void> {
+  const resolvedBase =
+    portalBaseUrl ||
+    (typeof window !== 'undefined' && window.location.origin.startsWith('https://')
+      ? `${window.location.origin}${window.location.pathname}`.replace(/\/+$/, '')
+      : 'https://mediqtechsupport-byte.github.io/Forms');
+
+  await invokeAuthEdgeFunction(
+    'notify-form-event',
+    {
+      request_id: requestId,
+      event,
+      portal_base_url: resolvedBase,
+    },
+    'Unable to dispatch form email notification.'
+  );
 }

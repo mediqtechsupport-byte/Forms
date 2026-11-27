@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
+  AlertTriangle,
   Check,
   CheckCircle2,
   Clock,
@@ -111,7 +112,7 @@ export function CreateAccountCard({ allowBossRole }: { allowBossRole: boolean })
   const presetCoBoss = () => {
     setRole('boss');
     setDepartment('Executive');
-    if (!position.trim()) setPosition('Co-Executive / Managing Partner');
+    if (!position.trim()) setPosition('CEO / COO');
     nameInputRef.current?.focus();
   };
 
@@ -134,7 +135,7 @@ export function CreateAccountCard({ allowBossRole }: { allowBossRole: boolean })
         full_name: fullName.trim(),
         email: email.trim(),
         department,
-        position: position.trim() || (role === 'boss' ? 'Co-Executive' : 'Staff'),
+        position: position.trim() || (role === 'boss' ? 'CEO / COO' : 'Staff'),
         role,
         portal_base_url: getPortalBaseUrl(),
       });
@@ -223,14 +224,14 @@ export function CreateAccountCard({ allowBossRole }: { allowBossRole: boolean })
     switch (status) {
       case 'accepted':
         return (
-          <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-[10.5px] font-bold text-emerald-700">
+          <span className="inline-flex items-center gap-1 rounded-full border border-emerald-500/30 bg-emerald-500/15 px-2.5 py-0.5 text-[10.5px] font-bold text-emerald-500">
             <CheckCircle2 className="h-3 w-3" />
             Accepted
           </span>
         );
       case 'declined':
         return (
-          <span className="inline-flex items-center gap-1 rounded-full border border-rose-200 bg-rose-50 px-2.5 py-0.5 text-[10.5px] font-bold text-rose-700">
+          <span className="inline-flex items-center gap-1 rounded-full border border-rose-500/30 bg-[var(--fy-rose-bg)] px-2.5 py-0.5 text-[10.5px] font-bold text-[var(--fy-rose)]">
             <XCircle className="h-3 w-3" />
             Declined
           </span>
@@ -238,13 +239,13 @@ export function CreateAccountCard({ allowBossRole }: { allowBossRole: boolean })
       case 'revoked':
       case 'expired':
         return (
-          <span className="inline-flex items-center gap-1 rounded-full border border-[#dfd5c5] bg-[#f4efe6] px-2.5 py-0.5 text-[10.5px] font-semibold text-[#7a7469] capitalize">
+          <span className="inline-flex items-center gap-1 rounded-full border border-border bg-muted px-2.5 py-0.5 text-[10.5px] font-semibold text-muted-foreground capitalize">
             {status}
           </span>
         );
       default:
         return (
-          <span className="inline-flex items-center gap-1 rounded-full border border-amber-300 bg-amber-50 px-2.5 py-0.5 text-[10.5px] font-bold text-amber-800">
+          <span className="inline-flex items-center gap-1 rounded-full border border-amber-500/30 bg-[var(--fy-amber-bg)] px-2.5 py-0.5 text-[10.5px] font-bold text-[var(--fy-amber)]">
             <Clock className="h-3 w-3" />
             Pending Acceptance
           </span>
@@ -253,26 +254,27 @@ export function CreateAccountCard({ allowBossRole }: { allowBossRole: boolean })
   };
 
   const inputCls =
-    'w-full rounded-[12px] border border-[#dfd5c5] bg-white px-3 py-2 text-xs text-[#0d1c36] outline-none focus:border-[#163362] focus:ring-2 focus:ring-[#163362]/15';
+    'w-full rounded-[12px] border border-border bg-muted px-3 py-2 text-xs text-foreground placeholder:text-muted-foreground/70 outline-none transition focus:border-[var(--fy-text)] focus:ring-2 focus:ring-[var(--fy-soft)]';
 
   return (
     <div className="space-y-4">
       <form
         onSubmit={handleSendInvite}
-        className="rounded-[20px] border border-[#dfd5c5] bg-[#fdfbf7] p-5 text-[#0d1c36]"
+        className="rounded-[20px] border border-border bg-card p-5 text-foreground"
       >
-        <div className="flex flex-wrap items-center justify-between gap-2.5 border-b border-[#ebe3d6] pb-3.5">
+        <div className="flex flex-wrap items-center justify-between gap-2.5 border-b border-border pb-3.5">
           <div className="flex items-center gap-2.5">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-b from-[#163362] to-[#071329] text-[#f5efe4]">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[var(--fy-soft)] text-[var(--fy-text)]">
               <Mail className="h-4 w-4" />
             </div>
             <div>
-              <h3 className="text-sm font-extrabold text-[#0d1c36]">
-                Invite Staff / Co-Boss by Email (Acceptance Required)
+              <h3 className="text-sm font-extrabold text-foreground">
+                Invite Staff or Executive (CEO &amp; COO) by Email (Acceptance Required)
               </h3>
-              <p className="text-xs text-[#646159]">
-                Add an employee or Co-Boss email — they will receive a notification and must accept
-                the invitation &amp; set their own password before their account activates.
+              <p className="text-xs text-muted-foreground">
+                Add an employee, admin, or CEO / COO email — they will receive a notification and
+                must accept the invitation &amp; set their own password before their account
+                activates.
               </p>
             </div>
           </div>
@@ -283,15 +285,15 @@ export function CreateAccountCard({ allowBossRole }: { allowBossRole: boolean })
                 onClick={presetCoBoss}
                 className={`inline-flex cursor-pointer items-center gap-1.5 rounded-full px-3 py-1 text-[11px] font-bold transition ${
                   role === 'boss'
-                    ? 'bg-gradient-to-b from-[#163362] to-[#071329] text-[#f5efe4]'
-                    : 'border border-[#dfd5c5] bg-[#f4efe6] text-[#0f2344] hover:border-[#163362]'
+                    ? 'fy-primary'
+                    : 'border border-border bg-muted text-foreground hover:border-[var(--fy-text)]'
                 }`}
               >
                 <ShieldCheck className="h-3.5 w-3.5" />
-                + Invite 2nd Boss / Co-Executive
+                + Invite CEO / COO Executive
               </button>
             )}
-            <span className="inline-flex items-center gap-1 rounded-full border border-[#dfd5c5] bg-[#f4efe6] px-2.5 py-0.5 text-[11px] font-bold text-[#0f2344]">
+            <span className="inline-flex items-center gap-1 rounded-full border border-border bg-muted px-2.5 py-0.5 text-[11px] font-bold text-foreground">
               <Clock className="h-3 w-3" />
               {pendingCount} Pending
             </span>
@@ -300,19 +302,21 @@ export function CreateAccountCard({ allowBossRole }: { allowBossRole: boolean })
 
         <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
           <div>
-            <label className="mb-1 block text-xs font-semibold text-[#5c5951]">Full Name *</label>
+            <label className="mb-1 block text-xs font-semibold text-muted-foreground">
+              Full Name *
+            </label>
             <input
               ref={nameInputRef}
               type="text"
               required
               value={fullName}
               onChange={(e) => setFullName(e.target.value)}
-              placeholder={role === 'boss' ? 'e.g., Co-Executive Name' : 'e.g., Juan Dela Cruz'}
+              placeholder={role === 'boss' ? 'e.g., Executive Name' : 'e.g., Juan Dela Cruz'}
               className={inputCls}
             />
           </div>
           <div>
-            <label className="mb-1 block text-xs font-semibold text-[#5c5951]">
+            <label className="mb-1 block text-xs font-semibold text-muted-foreground">
               Employee / Staff Email *
             </label>
             <input
@@ -320,12 +324,14 @@ export function CreateAccountCard({ allowBossRole }: { allowBossRole: boolean })
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder={role === 'boss' ? 'wife.boss@gmail.com' : 'employee@gmail.com'}
+              placeholder={role === 'boss' ? 'ceo.coo@mediqvision.net' : 'employee@gmail.com'}
               className={inputCls}
             />
           </div>
           <div>
-            <label className="mb-1 block text-xs font-semibold text-[#5c5951]">Department</label>
+            <label className="mb-1 block text-xs font-semibold text-muted-foreground">
+              Department
+            </label>
             <select
               value={department}
               onChange={(e) => setDepartment(e.target.value)}
@@ -339,40 +345,44 @@ export function CreateAccountCard({ allowBossRole }: { allowBossRole: boolean })
             </select>
           </div>
           <div>
-            <label className="mb-1 block text-xs font-semibold text-[#5c5951]">Position</label>
+            <label className="mb-1 block text-xs font-semibold text-muted-foreground">
+              Position
+            </label>
             <input
               type="text"
               value={position}
               onChange={(e) => setPosition(e.target.value)}
-              placeholder={role === 'boss' ? 'Co-Executive' : 'e.g., Clinical Specialist'}
+              placeholder={role === 'boss' ? 'e.g., CEO or COO' : 'e.g., Clinical Specialist'}
               className={inputCls}
             />
           </div>
           <div>
-            <label className="mb-1 block text-xs font-semibold text-[#5c5951]">Portal Role *</label>
+            <label className="mb-1 block text-xs font-semibold text-muted-foreground">
+              Portal Role *
+            </label>
             <select
               value={role}
               onChange={(e) => setRole(e.target.value as UserRole)}
-              className={`${inputCls} font-bold text-[#0f2344]`}
+              className={`${inputCls} font-bold`}
             >
               <option value="employee">Employee Portal</option>
               <option value="hr">HR Admin Portal</option>
               <option value="accounting">Accounting Admin Portal</option>
-              {allowBossRole && <option value="boss">Boss Executive Admin</option>}
+              {allowBossRole && <option value="boss">Boss Executive Admin (CEO / COO)</option>}
             </select>
           </div>
         </div>
 
         <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
-          <p className="text-[11px] text-[#646159]">
+          <p className="text-[11px] text-muted-foreground">
             {role === 'boss'
-              ? 'Co-Boss invite: once accepted, this email gets full Boss Executive sign-off access with its own E-Signature.'
+              ? 'CEO / COO invite: once accepted, this email gets full Boss Executive sign-off access with its own E-Signature and receives form email alerts.'
               : 'The employee receives a notification & acceptance link valid for 7 days. Account activates only after they accept.'}
           </p>
           <button
             type="submit"
             disabled={submitting}
-            className="inline-flex cursor-pointer items-center gap-1.5 rounded-full bg-gradient-to-b from-[#163362] to-[#071329] px-5 py-2.5 text-xs font-bold text-[#f5efe4] shadow-[0_6px_16px_rgba(7,19,41,0.22)] transition hover:brightness-110 disabled:opacity-60"
+            className="fy-primary inline-flex cursor-pointer items-center gap-1.5 rounded-full px-5 py-2.5 text-xs font-bold shadow-sm transition disabled:opacity-60"
           >
             {submitting ? (
               <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -389,22 +399,32 @@ export function CreateAccountCard({ allowBossRole }: { allowBossRole: boolean })
 
         {/* Immediate Post-Send Confirmation & Copyable Link */}
         {lastSent && (
-          <div className="mt-4 rounded-2xl border border-[#163362]/20 bg-[#f4efe6] p-3.5">
+          <div
+            className={`mt-4 rounded-2xl border p-3.5 ${
+              lastSent.emailSent
+                ? 'border-emerald-500/30 bg-emerald-500/10'
+                : 'border-amber-500/30 bg-[var(--fy-amber-bg)]'
+            }`}
+          >
             <div className="flex flex-wrap items-start justify-between gap-2">
               <div className="min-w-0 flex-1">
-                <p className="inline-flex items-center gap-1.5 text-xs font-bold text-[#0f2344]">
-                  <CheckCircle2 className="h-4 w-4 text-emerald-700" />
+                <p className="inline-flex items-center gap-1.5 text-xs font-bold text-foreground">
+                  {lastSent.emailSent ? (
+                    <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                  ) : (
+                    <AlertTriangle className="h-4 w-4 text-[var(--fy-amber)]" />
+                  )}
                   {lastSent.emailSent
                     ? `Email notification sent to ${lastSent.email}`
-                    : `Invitation created for ${lastSent.email}`}
+                    : `Invitation link created (email not delivered) for ${lastSent.email}`}
                 </p>
-                <p className="mt-0.5 text-[11px] text-[#5c5951]">{lastSent.note}</p>
+                <p className="mt-0.5 text-[11px] text-muted-foreground">{lastSent.note}</p>
               </div>
               <div className="flex flex-wrap items-center gap-2">
                 <button
                   type="button"
                   onClick={() => void copyLink(lastSent.acceptUrl, 'last-sent')}
-                  className="inline-flex cursor-pointer items-center gap-1.5 rounded-full bg-gradient-to-b from-[#163362] to-[#071329] px-3.5 py-1.5 text-[11px] font-bold text-[#f5efe4]"
+                  className="fy-primary inline-flex cursor-pointer items-center gap-1.5 rounded-full px-3.5 py-1.5 text-[11px] font-bold"
                 >
                   {copiedId === 'last-sent' ? (
                     <Check className="h-3.5 w-3.5" />
@@ -420,14 +440,14 @@ export function CreateAccountCard({ allowBossRole }: { allowBossRole: boolean })
                     role: lastSent.role,
                     accept_url: lastSent.acceptUrl,
                   })}
-                  className="inline-flex items-center gap-1.5 rounded-full border border-[#dfd5c5] bg-white px-3.5 py-1.5 text-[11px] font-bold text-[#0f2344] transition hover:border-[#163362]"
+                  className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-3.5 py-1.5 text-[11px] font-bold text-foreground transition hover:border-[var(--fy-text)]"
                 >
                   <Mail className="h-3.5 w-3.5" />
                   Open Email App
                 </a>
               </div>
             </div>
-            <p className="mt-2 truncate rounded-lg border border-[#dfd5c5] bg-white px-2.5 py-1.5 font-mono text-[11px] text-[#5c5951]">
+            <p className="mt-2 truncate rounded-lg border border-border bg-muted px-2.5 py-1.5 font-mono text-[11px] text-muted-foreground">
               {lastSent.acceptUrl}
             </p>
           </div>
@@ -436,11 +456,11 @@ export function CreateAccountCard({ allowBossRole }: { allowBossRole: boolean })
 
       {/* Sent Invitations Tracker */}
       {invitations.length > 0 && (
-        <div className="overflow-hidden rounded-[20px] border border-[#dfd5c5] bg-[#fdfbf7] text-[#0d1c36]">
-          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#ebe3d6] bg-[#f4efe6]/70 px-5 py-3">
+        <div className="overflow-hidden rounded-[20px] border border-border bg-card text-foreground">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border bg-muted/60 px-5 py-3">
             <div className="flex items-center gap-2">
-              <UserPlus className="h-4 w-4 text-[#163362]" />
-              <h4 className="text-xs font-extrabold tracking-wide text-[#0f2344] uppercase">
+              <UserPlus className="h-4 w-4 text-[var(--fy-text)]" />
+              <h4 className="text-xs font-extrabold tracking-wide text-foreground uppercase">
                 Sent Invitations &amp; Acceptance Status ({invitations.length})
               </h4>
             </div>
@@ -448,7 +468,7 @@ export function CreateAccountCard({ allowBossRole }: { allowBossRole: boolean })
               type="button"
               onClick={() => void loadInvitations()}
               disabled={loadingInvites}
-              className="inline-flex cursor-pointer items-center gap-1 rounded-full border border-[#dfd5c5] bg-white px-3 py-1 text-[11px] font-semibold text-[#0f2344] transition hover:border-[#163362]"
+              className="inline-flex cursor-pointer items-center gap-1 rounded-full border border-border bg-card px-3 py-1 text-[11px] font-semibold text-foreground transition hover:border-[var(--fy-text)]"
             >
               <RefreshCw className={`h-3 w-3 ${loadingInvites ? 'animate-spin' : ''}`} />
               Refresh
@@ -457,7 +477,7 @@ export function CreateAccountCard({ allowBossRole }: { allowBossRole: boolean })
 
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs">
-              <thead className="border-b border-[#ebe3d6] bg-[#f4efe6]/45 text-[10.5px] font-bold tracking-wider text-[#5c5951] uppercase">
+              <thead className="border-b border-border bg-muted/45 text-[10.5px] font-bold tracking-wider text-muted-foreground uppercase">
                 <tr>
                   <th className="px-4 py-2.5">Invited Staff</th>
                   <th className="px-4 py-2.5">Portal Role</th>
@@ -466,27 +486,27 @@ export function CreateAccountCard({ allowBossRole }: { allowBossRole: boolean })
                   <th className="px-4 py-2.5 text-right">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-[#ebe3d6]">
+              <tbody className="divide-y divide-border/70">
                 {invitations.map((inv) => {
                   const link = buildAcceptUrl(inv.invite_token);
                   const canManage = inv.status === 'pending' && (allowBossRole || inv.role !== 'boss');
                   return (
-                    <tr key={inv.id} className="hover:bg-[#f4efe6]/40">
+                    <tr key={inv.id} className="hover:bg-muted/40">
                       <td className="px-4 py-2.5">
-                        <p className="font-semibold text-[#0d1c36]">{inv.full_name}</p>
-                        <p className="text-[11px] text-[#646159]">
+                        <p className="font-semibold text-foreground">{inv.full_name}</p>
+                        <p className="text-[11px] text-muted-foreground">
                           {inv.email} · {inv.department}
                         </p>
                       </td>
                       <td className="px-4 py-2.5">
-                        <span className="rounded-full bg-[#ede6d8] px-2.5 py-0.5 text-[10.5px] font-bold text-[#0f2344] uppercase">
+                        <span className="rounded-full bg-[var(--fy-soft)] px-2.5 py-0.5 text-[10.5px] font-bold text-[var(--fy-text)] uppercase">
                           {ROLE_META[inv.role].shortLabel}
                         </span>
                       </td>
                       <td className="px-4 py-2.5">
                         <div className="flex flex-col items-start gap-0.5">
                           {statusBadge(inv.status)}
-                          <span className="text-[10px] text-[#7a7469]">
+                          <span className="text-[10px] text-muted-foreground">
                             {inv.status === 'accepted' && inv.accepted_at
                               ? `Accepted ${formatDate(inv.accepted_at)}`
                               : inv.status === 'pending'
@@ -497,7 +517,7 @@ export function CreateAccountCard({ allowBossRole }: { allowBossRole: boolean })
                           </span>
                         </div>
                       </td>
-                      <td className="px-4 py-2.5 text-[11px] text-[#5c5951]">
+                      <td className="px-4 py-2.5 text-[11px] text-muted-foreground">
                         {inv.invited_by_name} ({inv.invited_by_role.toUpperCase()})
                       </td>
                       <td className="px-4 py-2.5 text-right">
@@ -506,10 +526,10 @@ export function CreateAccountCard({ allowBossRole }: { allowBossRole: boolean })
                             <button
                               type="button"
                               onClick={() => void copyLink(link, inv.id)}
-                              className="inline-flex cursor-pointer items-center gap-1 rounded-full border border-[#dfd5c5] bg-white px-2.5 py-1 text-[11px] font-semibold text-[#0f2344] hover:border-[#163362]"
+                              className="inline-flex cursor-pointer items-center gap-1 rounded-full border border-border bg-muted px-2.5 py-1 text-[11px] font-semibold text-foreground hover:border-[var(--fy-text)]"
                             >
                               {copiedId === inv.id ? (
-                                <Check className="h-3 w-3 text-emerald-700" />
+                                <Check className="h-3 w-3 text-emerald-500" />
                               ) : (
                                 <Copy className="h-3 w-3" />
                               )}
@@ -519,7 +539,7 @@ export function CreateAccountCard({ allowBossRole }: { allowBossRole: boolean })
                               type="button"
                               disabled={resendingId === inv.id}
                               onClick={() => void handleResend(inv)}
-                              className="inline-flex cursor-pointer items-center gap-1 rounded-full border border-[#dfd5c5] bg-[#f4efe6] px-2.5 py-1 text-[11px] font-semibold text-[#0f2344] hover:border-[#163362] disabled:opacity-50"
+                              className="inline-flex cursor-pointer items-center gap-1 rounded-full border border-border bg-[var(--fy-soft)] px-2.5 py-1 text-[11px] font-semibold text-[var(--fy-text)] hover:brightness-110 disabled:opacity-50"
                             >
                               {resendingId === inv.id ? (
                                 <Loader2 className="h-3 w-3 animate-spin" />
@@ -532,7 +552,7 @@ export function CreateAccountCard({ allowBossRole }: { allowBossRole: boolean })
                               type="button"
                               disabled={revokingId === inv.id}
                               onClick={() => void handleRevoke(inv)}
-                              className="inline-flex cursor-pointer items-center gap-1 rounded-full border border-rose-200 bg-rose-50 px-2.5 py-1 text-[11px] font-semibold text-rose-700 hover:bg-rose-100 disabled:opacity-50"
+                              className="inline-flex cursor-pointer items-center gap-1 rounded-full border border-rose-500/30 bg-[var(--fy-rose-bg)] px-2.5 py-1 text-[11px] font-semibold text-[var(--fy-rose)] hover:brightness-110 disabled:opacity-50"
                             >
                               {revokingId === inv.id ? (
                                 <Loader2 className="h-3 w-3 animate-spin" />
@@ -543,7 +563,7 @@ export function CreateAccountCard({ allowBossRole }: { allowBossRole: boolean })
                             </button>
                           </div>
                         ) : (
-                          <span className="text-[11px] text-[#8a8478]">—</span>
+                          <span className="text-[11px] text-muted-foreground">—</span>
                         )}
                       </td>
                     </tr>

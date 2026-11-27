@@ -41,7 +41,6 @@ import {
   Moon,
   Palette,
   PenTool,
-  Pin,
   Plus,
   Receipt,
   Save,
@@ -65,6 +64,8 @@ import {
   formatDate,
   formatPHP,
 } from "@/lib/constants";
+import { HrMemosBoardView } from "@/components/HrMemosBoardView";
+import { ProfileAvatarUploader } from "@/components/ProfileAvatarUploader";
 import { SignaturePad } from "@/components/SignaturePad";
 import { RequestTypeIcon } from "@/components/StatusBadges";
 import { EmployeeFormsDatatable } from "@/components/ui/employee-forms-datatable";
@@ -83,10 +84,10 @@ import type {
 
 /* ------------------------------------------------------------------ types */
 
-type View = "dashboard" | "forms" | "calendar" | "leave" | "settings";
+type View = "dashboard" | "forms" | "calendar" | "leave" | "memos" | "settings";
 type Theme = "light" | "dark";
 type FormFilter = "all" | "pending" | "approved" | "closed";
-type SetTab = "profile" | "memos" | "look";
+type SetTab = "profile" | "look";
 type CalKind = "leave" | "overtime" | "official_business" | "finance" | "other";
 
 interface CalEvent {
@@ -166,6 +167,7 @@ const NAV_GROUPS: { id: string; label: string; items: NavItem[] }[] = [
     items: [
       { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
       { id: "forms", label: "My Forms", icon: SquareCheckBig },
+      { id: "memos", label: "HR Memos", icon: Megaphone },
       { id: "calendar", label: "Calendar", icon: CalendarDays },
       { id: "leave", label: "Leave Summary", icon: CalendarCheck2 },
     ],
@@ -181,7 +183,6 @@ const NAV: NavItem[] = NAV_GROUPS.flatMap((g) => g.items);
 
 const SET_TABS: { id: SetTab; label: string; icon: LucideIcon }[] = [
   { id: "profile", label: "Profile & E-Sig", icon: UserRound },
-  { id: "memos", label: "HR Memos", icon: Bell },
   { id: "look", label: "Appearance", icon: Palette },
 ];
 
@@ -416,15 +417,22 @@ function AvatarCircle({
   name,
   tint = "#e6dac6",
   size = 44,
+  avatarUrl,
 }: {
   name: string;
   tint?: string;
   size?: number;
+  avatarUrl?: string | null;
 }) {
+  const [imgFailed, setImgFailed] = useState(false);
+  useEffect(() => {
+    setImgFailed(false);
+  }, [avatarUrl]);
+  const showPhoto = Boolean(avatarUrl && !imgFailed);
   return (
     <span
       aria-hidden="true"
-      className="grid flex-none place-items-center rounded-full font-semibold tracking-[0.02em] text-[rgb(19_26_21/0.82)]"
+      className="grid flex-none place-items-center overflow-hidden rounded-full font-semibold tracking-[0.02em] text-[rgb(19_26_21/0.82)]"
       style={{
         width: size,
         height: size,
@@ -432,7 +440,16 @@ function AvatarCircle({
         fontSize: Math.round(size * 0.32),
       }}
     >
-      {initials(name)}
+      {showPhoto ? (
+        <img
+          src={avatarUrl!}
+          alt=""
+          onError={() => setImgFailed(true)}
+          className="h-full w-full object-cover"
+        />
+      ) : (
+        initials(name)
+      )}
     </span>
   );
 }
@@ -1502,7 +1519,6 @@ function Radios<T extends string>({
 
 function EmployeeSettingsView({
   profile,
-  announcements,
   theme,
   onTheme,
   accent,
@@ -1512,7 +1528,6 @@ function EmployeeSettingsView({
   onToast,
 }: {
   profile: Profile | null;
-  announcements: Announcement[];
   theme: Theme;
   onTheme: (t: Theme) => void;
   accent: string;
@@ -1521,7 +1536,7 @@ function EmployeeSettingsView({
   onWeekStart: (w: 0 | 1) => void;
   onToast: (msg: string) => void;
 }) {
-  const { saveProfile } = useAppData();
+  const { saveProfile, refreshAll } = useAppData();
   const { toast } = useToast();
   const [tab, setTab] = useState<SetTab>("profile");
   const [fullName, setFullName] = useState(profile?.full_name ?? "");
@@ -1670,17 +1685,27 @@ function EmployeeSettingsView({
             >
               {tab === "profile" ? (
                 <form onSubmit={handleSave} className="space-y-6">
-                  <div className="flex flex-wrap items-center gap-4">
-                    <AvatarCircle name={fullName || profile?.full_name || "Employee"} tint="#e6dac6" size={60} />
-                    <div className="min-w-0">
-                      <h2 className="text-[20px] font-semibold tracking-[-0.02em]">
-                        Profile & Digital E-Signature
-                      </h2>
-                      <p className="mt-0.5 text-[14px] text-muted-foreground">
-                        {profile?.employee_code} · {profile?.email}
-                      </p>
+                  {profile ? (
+                    <ProfileAvatarUploader
+                      profileId={profile.id}
+                      fullName={fullName || profile.full_name || "Employee"}
+                      subtitle={`${profile.employee_code ?? ""} · ${profile.email}`}
+                      heading="Profile & Digital E-Signature"
+                      avatarUrl={profile.avatar_url}
+                      onUploaded={async () => {
+                        await refreshAll();
+                      }}
+                    />
+                  ) : (
+                    <div className="flex flex-wrap items-center gap-4">
+                      <AvatarCircle name={fullName || "Employee"} tint="#e6dac6" size={60} />
+                      <div className="min-w-0">
+                        <h2 className="text-[20px] font-semibold tracking-[-0.02em]">
+                          Profile & Digital E-Signature
+                        </h2>
+                      </div>
                     </div>
-                  </div>
+                  )}
 
                   <div className="grid gap-4 sm:grid-cols-2">
                     <label className={labelCls}>
@@ -1725,14 +1750,15 @@ function EmployeeSettingsView({
                     </label>
                   </div>
 
-                  <div className="rounded-2xl border border-border bg-white p-4 text-slate-900">
-                    <p className="mb-3 text-xs font-semibold text-slate-600">
+                  <div className="rounded-2xl border border-border bg-card p-4 text-foreground">
+                    <p className="mb-3 text-xs font-semibold text-muted-foreground">
                       Saved Digital E-Signature (auto-fills on all future forms)
                     </p>
                     <SignaturePad
                       signerName={fullName || profile?.full_name || "Employee"}
                       initialSignature={signatureData || null}
                       onChange={handleSigChange}
+                      adaptiveTheme
                     />
                   </div>
 
@@ -1753,47 +1779,6 @@ function EmployeeSettingsView({
                     </button>
                   </div>
                 </form>
-              ) : tab === "memos" ? (
-                <div>
-                  <h2 className="text-[20px] font-semibold tracking-[-0.02em]">
-                    HR & Admin Memos
-                  </h2>
-                  <p className="mt-0.5 text-[14px] text-muted-foreground">
-                    Live company advisories published by HR, Boss Executive, and Accounting.
-                  </p>
-                  {announcements.length === 0 ? (
-                    <div className="mt-6 rounded-2xl border border-dashed border-border bg-muted p-8 text-center">
-                      <Megaphone className="mx-auto h-7 w-7 text-muted-foreground" />
-                      <p className="mt-2 text-sm font-semibold">No memos posted yet</p>
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        Company announcements appear here automatically via live Supabase sync.
-                      </p>
-                    </div>
-                  ) : (
-                    <ul className="mt-5 grid gap-3">
-                      {announcements.map((ann) => (
-                        <li
-                          key={ann.id}
-                          className="rounded-2xl border border-border bg-muted p-4"
-                        >
-                          <div className="flex items-center justify-between gap-2">
-                            <span className="text-[15px] font-semibold">{ann.title}</span>
-                            {ann.is_pinned ? (
-                              <span className="inline-flex items-center gap-1 rounded-full bg-[var(--fy-soft)] px-2.5 py-0.5 text-[11px] font-semibold text-[var(--fy-text)]">
-                                <Pin className="h-3 w-3" /> Pinned
-                              </span>
-                            ) : null}
-                          </div>
-                          <p className="mt-1.5 text-sm text-muted-foreground">{ann.body}</p>
-                          <p className="mt-2 text-xs text-[var(--fy-faint)]">
-                            {ann.author?.full_name ?? "MediQ Admin"} ·{" "}
-                            {formatDate(ann.created_at)}
-                          </p>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
               ) : (
                 <div className="grid gap-7">
                   <div>
@@ -1843,6 +1828,8 @@ function Sidebar({
   onGo,
   dark,
   totalForms,
+  unreadMemos,
+  totalMemos,
   approvalPct,
   hasSignature,
   onQuickAction,
@@ -1852,6 +1839,8 @@ function Sidebar({
   onGo: (v: View) => void;
   dark: boolean;
   totalForms: number;
+  unreadMemos: number;
+  totalMemos: number;
   approvalPct: number;
   hasSignature: boolean;
   onQuickAction: () => void;
@@ -1946,6 +1935,20 @@ function Sidebar({
                           className="ml-auto rounded-md bg-[var(--fy-950)] px-[7px] py-0.5 text-[10.5px] font-semibold text-[#f0f7f2]"
                         >
                           {totalForms}
+                        </motion.span>
+                      ) : n.id === "memos" && (unreadMemos > 0 || totalMemos > 0) ? (
+                        <motion.span
+                          key={`${unreadMemos}-${totalMemos}`}
+                          initial={{ scale: 0.6 }}
+                          animate={{ scale: 1 }}
+                          transition={{ type: "spring", bounce: 0, duration: 0.45 }}
+                          className={`ml-auto rounded-md px-[7px] py-0.5 text-[10.5px] font-semibold ${
+                            unreadMemos > 0
+                              ? "bg-[var(--fy-rose)] text-[#081428]"
+                              : "bg-[var(--fy-soft)] text-[var(--fy-text)]"
+                          }`}
+                        >
+                          {unreadMemos > 0 ? `${unreadMemos} new` : totalMemos}
                         </motion.span>
                       ) : null}
                     </button>
@@ -2307,16 +2310,16 @@ export function MediqEmployeeDashboard({
 
   const [theme, setTheme] = useState<Theme>(() => {
     try {
-      return localStorage.getItem("mediq-emp-theme") === "dark" ? "dark" : "light";
+      return localStorage.getItem("mediq-portal-theme-v2") === "light" ? "light" : "dark";
     } catch {
-      return "light";
+      return "dark";
     }
   });
   const [accent, setAccent] = useState<string>(() => {
     try {
-      return localStorage.getItem("mediq-emp-accent-v2") || "#163362";
+      return localStorage.getItem("mediq-portal-accent-v2") || "#0f2942";
     } catch {
-      return "#163362";
+      return "#0f2942";
     }
   });
   const [weekStart, setWeekStart] = useState<0 | 1>(() => {
@@ -2333,22 +2336,69 @@ export function MediqEmployeeDashboard({
   const [formFilter, setFormFilter] = useState<FormFilter>("all");
   const [tray, setTray] = useState(false);
   const [readIds, setReadIds] = useState<Set<string>>(() => new Set());
+  const [seenMemoIds, setSeenMemoIds] = useState<Set<number>>(() => {
+    try {
+      const raw = localStorage.getItem(`mediq-seen-memos-${profile?.id ?? "guest"}`);
+      const arr = raw ? (JSON.parse(raw) as number[]) : [];
+      return new Set(Array.isArray(arr) ? arr : []);
+    } catch {
+      return new Set();
+    }
+  });
+  const prevMemoIdsRef = useRef<Set<number> | null>(null);
   const [toastMsg, setToastMsg] = useState<{ id: number; msg: string } | null>(null);
 
   const boardRef = useRef<HTMLElement | null>(null);
   const bellRef = useRef<HTMLButtonElement | null>(null);
 
+  const persistSeenMemos = useCallback(
+    (next: Set<number>) => {
+      setSeenMemoIds(next);
+      try {
+        localStorage.setItem(
+          `mediq-seen-memos-${profile?.id ?? "guest"}`,
+          JSON.stringify(Array.from(next))
+        );
+      } catch {
+        // ignore storage errors
+      }
+    },
+    [profile?.id]
+  );
+
+  const markAllMemosRead = useCallback(() => {
+    const next = new Set(seenMemoIds);
+    for (const a of announcements) next.add(a.id);
+    persistSeenMemos(next);
+  }, [announcements, seenMemoIds, persistSeenMemos]);
+
+  // Live notification toast whenever HR posts a brand-new memo while user is signed in
+  useEffect(() => {
+    const currentIds = new Set(announcements.map((a) => a.id));
+    if (prevMemoIdsRef.current !== null) {
+      const newest = announcements.find((a) => !prevMemoIdsRef.current!.has(a.id));
+      if (newest) {
+        setToastMsg({ id: Date.now(), msg: `New HR Memo: ${newest.title}` });
+      }
+    }
+    prevMemoIdsRef.current = currentIds;
+  }, [announcements]);
+
   useEffect(() => {
     try {
-      localStorage.setItem("mediq-emp-theme", theme);
+      localStorage.setItem("mediq-portal-theme-v2", theme);
     } catch {
       // ignore storage errors
+    }
+    if (typeof document !== "undefined") {
+      document.documentElement.classList.toggle("dark", theme === "dark");
+      document.documentElement.classList.toggle("fy-light", theme === "light");
     }
   }, [theme]);
 
   useEffect(() => {
     try {
-      localStorage.setItem("mediq-emp-accent-v2", accent);
+      localStorage.setItem("mediq-portal-accent-v2", accent);
     } catch {
       // ignore storage errors
     }
@@ -2483,21 +2533,31 @@ export function MediqEmployeeDashboard({
     [announcements, q]
   );
 
+  const unreadMemosCount = useMemo(
+    () => announcements.filter((a) => !seenMemoIds.has(a.id)).length,
+    [announcements, seenMemoIds]
+  );
+
   /* Live Notifications from HR Memos + Form Statuses */
   const notices: NoticeItem[] = useMemo(() => {
     const list: NoticeItem[] = [];
-    for (const ann of announcements.slice(0, 4)) {
+    for (const ann of announcements.slice(0, 6)) {
       const id = `ann-${ann.id}`;
       list.push({
         id,
         who: ann.author?.full_name || "HR Admin",
-        tint: "#cfd6f7",
-        verb: "posted memo",
+        tint: "#d9c7a7",
+        verb: "posted HR memo",
         what: ann.title,
         tail: "",
         ago: formatDate(ann.created_at),
-        unread: !readIds.has(id),
-        onOpen: () => go("settings"),
+        unread: !seenMemoIds.has(ann.id) && !readIds.has(id),
+        onOpen: () => {
+          const next = new Set(seenMemoIds);
+          next.add(ann.id);
+          persistSeenMemos(next);
+          go("memos");
+        },
       });
     }
     for (const req of myRequests.slice(0, 4)) {
@@ -2521,9 +2581,10 @@ export function MediqEmployeeDashboard({
       });
     }
     return list;
-  }, [announcements, myRequests, readIds]);
+  }, [announcements, myRequests, readIds, seenMemoIds, persistSeenMemos]);
 
-  const hasUnread = notices.some((n) => n.unread);
+  const unreadNoticeCount = notices.filter((n) => n.unread).length;
+  const hasUnread = unreadNoticeCount > 0;
   const topMemo =
     filteredAnnouncements.find((a) => a.is_pinned) ?? filteredAnnouncements[0] ?? null;
 
@@ -2548,6 +2609,8 @@ export function MediqEmployeeDashboard({
             onGo={go}
             dark={dark}
             totalForms={myRequests.length}
+            unreadMemos={unreadMemosCount}
+            totalMemos={announcements.length}
             approvalPct={approvalPct}
             hasSignature={hasSignature}
             onQuickAction={() =>
@@ -2583,7 +2646,7 @@ export function MediqEmployeeDashboard({
                 quickForms={quickFormOptions}
                 onInspectRequest={onInspect}
                 onOpenNewForm={onOpenNewForm}
-                onSelectAnnouncement={() => go("settings")}
+                onSelectAnnouncement={() => go("memos")}
                 onViewAllMatches={() => {
                   setFormFilter("all");
                   go("forms");
@@ -2634,8 +2697,10 @@ export function MediqEmployeeDashboard({
                           animate={{ scale: 1 }}
                           exit={{ scale: 0 }}
                           aria-hidden="true"
-                          className="absolute right-[11px] top-[10px] h-2 w-2 rounded-full bg-[var(--fy-rose)] shadow-[0_0_0_2px_var(--card)] sm:right-[13px] sm:top-3"
-                        />
+                          className="absolute -right-0.5 -top-0.5 grid min-h-[18px] min-w-[18px] place-items-center rounded-full bg-[var(--fy-rose)] px-1 text-[10px] font-bold text-[#081428] shadow-[0_0_0_2px_var(--card)]"
+                        >
+                          {unreadNoticeCount > 9 ? "9+" : unreadNoticeCount}
+                        </motion.span>
                       ) : null}
                     </AnimatePresence>
                   </motion.button>
@@ -2645,9 +2710,10 @@ export function MediqEmployeeDashboard({
                         notes={notices}
                         bellRef={bellRef}
                         onClose={() => setTray(false)}
-                        onRead={() =>
-                          setReadIds(new Set(notices.map((n) => n.id)))
-                        }
+                        onRead={() => {
+                          setReadIds(new Set(notices.map((n) => n.id)));
+                          markAllMemosRead();
+                        }}
                       />
                     ) : null}
                   </AnimatePresence>
@@ -2659,7 +2725,7 @@ export function MediqEmployeeDashboard({
                   aria-label={`Profile and settings for ${fullName}`}
                   className="fy-focus hidden cursor-pointer items-center gap-3 rounded-full py-0.5 pl-0.5 pr-2 text-left sm:flex"
                 >
-                  <AvatarCircle name={fullName} tint="#e6dac6" size={44} />
+                  <AvatarCircle name={fullName} tint="#e6dac6" size={44} avatarUrl={profile?.avatar_url} />
                   <span className="hidden xl:grid">
                     <span className="max-w-[180px] truncate text-[15px] font-medium leading-tight">
                       {fullName}
@@ -2796,20 +2862,13 @@ export function MediqEmployeeDashboard({
                           )}
                           <button
                             type="button"
-                            onClick={() => go(topMemo ? "settings" : "calendar")}
+                            onClick={() => go("memos")}
                             className="fy-primary fy-focus mt-auto inline-flex h-12 w-full cursor-pointer items-center justify-center gap-2 rounded-full text-[14.5px] font-medium"
                           >
-                            {topMemo ? (
-                              <>
-                                <Megaphone className="h-4 w-4" />
-                                View All Memos
-                              </>
-                            ) : (
-                              <>
-                                <CalendarDays className="h-4 w-4" />
-                                Open Form Calendar
-                              </>
-                            )}
+                            <Megaphone className="h-4 w-4" />
+                            {topMemo
+                              ? `View All Memos (${announcements.length})`
+                              : "Open HR Memos"}
                           </button>
                         </FyCard>
 
@@ -3209,10 +3268,16 @@ export function MediqEmployeeDashboard({
                         />
                       </FyCard>
                     </>
+                  ) : view === "memos" ? (
+                    <HrMemosBoardView
+                      announcements={announcements}
+                      seenMemoIds={seenMemoIds}
+                      onMarkAllRead={markAllMemosRead}
+                      query={query}
+                    />
                   ) : (
                     <EmployeeSettingsView
                       profile={profile}
-                      announcements={announcements}
                       theme={theme}
                       onTheme={setTheme}
                       accent={accent}

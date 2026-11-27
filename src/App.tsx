@@ -56,15 +56,25 @@ function WorkspaceApp() {
     );
   }
 
-  // If the user landed from a Supabase email invite link whose redirect landed at Site URL,
+  // If the user landed from a Supabase email invite link (?invite_token=... or Site URL redirect with metadata),
   // send them straight to the branded Acceptance page so they explicitly accept & set their password.
-  const pendingInviteToken =
-    user?.user_metadata?.invite_pending === true &&
-    typeof user?.user_metadata?.invite_token === 'string'
-      ? user.user_metadata.invite_token
+  const searchInviteToken =
+    typeof window !== 'undefined'
+      ? new URLSearchParams(window.location.search).get('invite_token')?.trim() || null
       : null;
 
+  const pendingInviteToken =
+    searchInviteToken ||
+    (user?.user_metadata?.invite_pending === true &&
+    typeof user?.user_metadata?.invite_token === 'string'
+      ? user.user_metadata.invite_token
+      : null);
+
   if (pendingInviteToken && location.pathname !== '/accept-invite') {
+    if (searchInviteToken && typeof window !== 'undefined') {
+      const cleanUrl = `${window.location.origin}${window.location.pathname}#/accept-invite?token=${encodeURIComponent(searchInviteToken)}`;
+      window.history.replaceState(null, '', cleanUrl);
+    }
     return <Navigate to={`/accept-invite?token=${pendingInviteToken}`} replace />;
   }
 

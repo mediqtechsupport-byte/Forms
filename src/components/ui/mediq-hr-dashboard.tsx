@@ -64,6 +64,7 @@ import {
 } from "@/lib/constants";
 import { CreateAccountCard } from "@/components/CreateAccountCard";
 import { EmployeeHistoryExportModal } from "@/components/EmployeeHistoryExportModal";
+import { ProfileAvatarUploader } from "@/components/ProfileAvatarUploader";
 import { SignaturePad } from "@/components/SignaturePad";
 import { RequestTypeBadge, RequestTypeIcon, RoleBadge } from "@/components/StatusBadges";
 import { EmployeeFormsDatatable } from "@/components/ui/employee-forms-datatable";
@@ -285,15 +286,22 @@ function AvatarCircle({
   name,
   tint = "#e6dac6",
   size = 44,
+  avatarUrl,
 }: {
   name: string;
   tint?: string;
   size?: number;
+  avatarUrl?: string | null;
 }) {
+  const [imgFailed, setImgFailed] = useState(false);
+  useEffect(() => {
+    setImgFailed(false);
+  }, [avatarUrl]);
+  const showPhoto = Boolean(avatarUrl && !imgFailed);
   return (
     <span
       aria-hidden="true"
-      className="grid flex-none place-items-center rounded-full font-semibold tracking-[0.02em] text-[#0d1c36]"
+      className="grid flex-none place-items-center overflow-hidden rounded-full font-semibold tracking-[0.02em] text-[#0d1c36]"
       style={{
         width: size,
         height: size,
@@ -301,7 +309,16 @@ function AvatarCircle({
         fontSize: Math.round(size * 0.32),
       }}
     >
-      {initials(name)}
+      {showPhoto ? (
+        <img
+          src={avatarUrl!}
+          alt=""
+          onError={() => setImgFailed(true)}
+          className="h-full w-full object-cover"
+        />
+      ) : (
+        initials(name)
+      )}
     </span>
   );
 }
@@ -1117,7 +1134,7 @@ function HrSettingsView({
   onAccent: (hex: string) => void;
   onToast: (msg: string) => void;
 }) {
-  const { saveProfile } = useAppData();
+  const { saveProfile, refreshAll } = useAppData();
   const { toast } = useToast();
   const [tab, setTab] = useState<SetTab>("profile");
   const [fullName, setFullName] = useState(profile?.full_name ?? "");
@@ -1239,21 +1256,27 @@ function HrSettingsView({
             >
               {tab === "profile" ? (
                 <form onSubmit={handleSave} className="space-y-6">
-                  <div className="flex flex-wrap items-center gap-4">
-                    <AvatarCircle
-                      name={fullName || profile?.full_name || "HR Admin"}
-                      tint="#e6dac6"
-                      size={60}
+                  {profile ? (
+                    <ProfileAvatarUploader
+                      profileId={profile.id}
+                      fullName={fullName || profile.full_name || "HR Admin"}
+                      subtitle={`${profile.employee_code ?? ""} · ${profile.email}`}
+                      heading="HR Profile & Endorsement E-Signature"
+                      avatarUrl={profile.avatar_url}
+                      onUploaded={async () => {
+                        await refreshAll();
+                      }}
                     />
-                    <div className="min-w-0">
-                      <h2 className="text-[20px] font-semibold tracking-[-0.02em]">
-                        HR Profile &amp; Endorsement E-Signature
-                      </h2>
-                      <p className="mt-0.5 text-[14px] text-muted-foreground">
-                        {profile?.employee_code} · {profile?.email}
-                      </p>
+                  ) : (
+                    <div className="flex flex-wrap items-center gap-4">
+                      <AvatarCircle name={fullName || "HR Admin"} tint="#e6dac6" size={60} />
+                      <div className="min-w-0">
+                        <h2 className="text-[20px] font-semibold tracking-[-0.02em]">
+                          HR Profile &amp; Endorsement E-Signature
+                        </h2>
+                      </div>
                     </div>
-                  </div>
+                  )}
 
                   <div className="grid gap-4 sm:grid-cols-2">
                     <label className={labelCls}>
@@ -1298,14 +1321,15 @@ function HrSettingsView({
                     </label>
                   </div>
 
-                  <div className="rounded-2xl border border-border bg-white p-4 text-slate-900">
-                    <p className="mb-3 text-xs font-semibold text-slate-600">
+                  <div className="rounded-2xl border border-border bg-card p-4 text-foreground">
+                    <p className="mb-3 text-xs font-semibold text-muted-foreground">
                       Default HR Endorsement Signature Stamp (appears on endorsed digital slips)
                     </p>
                     <SignaturePad
                       signerName={fullName || profile?.full_name || "HR Admin"}
                       initialSignature={signatureData || null}
                       onChange={handleSigChange}
+                      adaptiveTheme
                     />
                   </div>
 
@@ -1832,6 +1856,7 @@ function HrNotificationTray({
                   name={req.employee?.full_name || "Staff"}
                   tint="#e6dac6"
                   size={36}
+                  avatarUrl={req.employee?.avatar_url}
                 />
                 <span className="min-w-0 flex-1">
                   <b className="font-semibold text-foreground">
@@ -1873,16 +1898,16 @@ export function MediqHrDashboard({
 
   const [theme, setTheme] = useState<Theme>(() => {
     try {
-      return localStorage.getItem("mediq-hr-theme") === "dark" ? "dark" : "light";
+      return localStorage.getItem("mediq-portal-theme-v2") === "light" ? "light" : "dark";
     } catch {
-      return "light";
+      return "dark";
     }
   });
   const [accent, setAccent] = useState<string>(() => {
     try {
-      return localStorage.getItem("mediq-hr-accent") || "#163362";
+      return localStorage.getItem("mediq-portal-accent-v2") || "#0f2942";
     } catch {
-      return "#163362";
+      return "#0f2942";
     }
   });
 
@@ -1921,15 +1946,19 @@ export function MediqHrDashboard({
 
   useEffect(() => {
     try {
-      localStorage.setItem("mediq-hr-theme", theme);
+      localStorage.setItem("mediq-portal-theme-v2", theme);
     } catch {
       // ignore
+    }
+    if (typeof document !== "undefined") {
+      document.documentElement.classList.toggle("dark", theme === "dark");
+      document.documentElement.classList.toggle("fy-light", theme === "light");
     }
   }, [theme]);
 
   useEffect(() => {
     try {
-      localStorage.setItem("mediq-hr-accent", accent);
+      localStorage.setItem("mediq-portal-accent-v2", accent);
     } catch {
       // ignore
     }
@@ -2318,7 +2347,7 @@ export function MediqHrDashboard({
                   aria-label={`HR settings for ${fullName}`}
                   className="fy-focus hidden cursor-pointer items-center gap-3 rounded-full py-0.5 pl-0.5 pr-2 text-left sm:flex"
                 >
-                  <AvatarCircle name={fullName} tint="#e6dac6" size={44} />
+                  <AvatarCircle name={fullName} tint="#e6dac6" size={44} avatarUrl={currentUser?.avatar_url} />
                   <span className="hidden xl:grid">
                     <span className="max-w-[180px] truncate text-[15px] font-medium leading-tight">
                       {fullName}
@@ -2523,6 +2552,7 @@ export function MediqHrDashboard({
                                       name={emp.full_name}
                                       tint="#e6dac6"
                                       size={34}
+                                      avatarUrl={emp.avatar_url}
                                     />
                                     <span className="min-w-0 flex-1">
                                       <span className="block truncate text-[14px] font-medium leading-[1.25]">
@@ -2908,6 +2938,7 @@ export function MediqHrDashboard({
                                             name={emp.full_name}
                                             tint="#e6dac6"
                                             size={34}
+                                            avatarUrl={emp.avatar_url}
                                           />
                                           <div>
                                             <p className="font-semibold text-foreground">
