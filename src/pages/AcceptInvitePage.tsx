@@ -260,7 +260,7 @@ export function AcceptInvitePage() {
               <div className="rounded-2xl border border-[#203456] bg-[#0b172b] p-4">
                 <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#203456] pb-3">
                   <span className="text-[11px] font-bold tracking-[0.06em] text-[#d9c7a7] uppercase">
-                    Invited By {invite.invited_by_name} ({invite.invited_by_role.toUpperCase()})
+                    Invited By {invite.invited_by_name}
                   </span>
                   <span className="rounded-full bg-[#d9c7a7] px-3 py-0.5 text-[11px] font-bold text-[#081428]">
                     {ROLE_META[invite.role].label}

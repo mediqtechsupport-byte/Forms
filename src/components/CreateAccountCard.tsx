@@ -518,7 +518,7 @@ export function CreateAccountCard({ allowBossRole }: { allowBossRole: boolean })
                         </div>
                       </td>
                       <td className="px-4 py-2.5 text-[11px] text-muted-foreground">
-                        {inv.invited_by_name} ({inv.invited_by_role.toUpperCase()})
+                        {inv.invited_by_name}
                       </td>
                       <td className="px-4 py-2.5 text-right">
                         {canManage ? (
