@@ -153,6 +153,21 @@ export interface CreateFormRequestInput {
   metadata?: RequestMetadata;
 }
 
+function resolveAllowedMimeType(file: File): string {
+  const raw = (file.type || '').toLowerCase().trim();
+  if (raw === 'image/jpg') return 'image/jpeg';
+  if (['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'application/pdf'].includes(raw)) {
+    return raw;
+  }
+  const ext = file.name.split('.').pop()?.toLowerCase() ?? '';
+  if (ext === 'jpg' || ext === 'jpeg') return 'image/jpeg';
+  if (ext === 'png') return 'image/png';
+  if (ext === 'webp') return 'image/webp';
+  if (ext === 'heic' || ext === 'heif') return 'image/heic';
+  if (ext === 'pdf') return 'application/pdf';
+  return raw || 'image/jpeg';
+}
+
 export async function createFormRequestWithFiles(
   input: CreateFormRequestInput,
   files: File[]
@@ -193,13 +208,14 @@ export async function createFormRequestWithFiles(
   for (const file of files) {
     const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
     const storagePath = `${input.employee_id}/${request.id}/${Date.now()}-${safeName}`;
+    const mimeType = resolveAllowedMimeType(file);
 
     const { error: uploadError } = await supabase.storage
       .from('request-attachments')
       .upload(storagePath, file, {
         cacheControl: '3600',
         upsert: true,
-        contentType: file.type || 'application/octet-stream',
+        contentType: mimeType,
       });
 
     if (uploadError) {
@@ -211,7 +227,7 @@ export async function createFormRequestWithFiles(
       uploaded_by: input.employee_id,
       file_name: file.name,
       file_path: storagePath,
-      mime_type: file.type || 'application/octet-stream',
+      mime_type: mimeType,
       file_size: file.size,
     });
 

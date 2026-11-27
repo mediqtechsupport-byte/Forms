@@ -1,4 +1,4 @@
-import type { RequestStatus, RequestType, UserRole } from '../types/database';
+import type { FormRequest, RequestStatus, RequestType, UserRole } from '../types/database';
 
 export const DEPARTMENTS = [
   'Executive',
@@ -66,7 +66,7 @@ export const REQUEST_TYPE_META: Record<
     colorClass: 'text-sky-700 bg-sky-50 ring-1 ring-sky-200/80',
     bgSoft: 'bg-sky-500',
     description: 'Vacation, Sick, Emergency, Maternity/Paternity, or Unpaid Leave',
-    routedTo: 'HR & Boss',
+    routedTo: 'HR First → Boss',
   },
   overtime: {
     label: 'Overtime Authorization',
@@ -75,7 +75,7 @@ export const REQUEST_TYPE_META: Record<
     colorClass: 'text-indigo-700 bg-indigo-50 ring-1 ring-indigo-200/80',
     bgSoft: 'bg-indigo-500',
     description: 'Regular weekday, rest day, or holiday overtime hours',
-    routedTo: 'HR, Boss & Accounting',
+    routedTo: 'HR & Accounting First → Boss',
   },
   reimbursement: {
     label: 'Expense Reimbursement',
@@ -84,7 +84,7 @@ export const REQUEST_TYPE_META: Record<
     colorClass: 'text-emerald-700 bg-emerald-50 ring-1 ring-emerald-200/80',
     bgSoft: 'bg-emerald-500',
     description: 'Travel, client meals, fuel/parking, supplies, or clinical expenses',
-    routedTo: 'Accounting & Boss',
+    routedTo: 'Accounting First → Boss',
   },
   official_business: {
     label: 'Official Business / Field Work',
@@ -93,7 +93,7 @@ export const REQUEST_TYPE_META: Record<
     colorClass: 'text-cyan-700 bg-cyan-50 ring-1 ring-cyan-200/80',
     bgSoft: 'bg-cyan-500',
     description: 'Hospital visits, client meetings, surgical support, conferences',
-    routedTo: 'HR & Boss',
+    routedTo: 'HR First → Boss',
   },
   cash_advance: {
     label: 'Cash Advance',
@@ -102,7 +102,7 @@ export const REQUEST_TYPE_META: Record<
     colorClass: 'text-amber-800 bg-amber-50 ring-1 ring-amber-200/80',
     bgSoft: 'bg-amber-500',
     description: 'Field travel allowance, event funds, or petty cash advance',
-    routedTo: 'Accounting & Boss',
+    routedTo: 'Accounting First → Boss',
   },
   other: {
     label: 'Other HR / Admin Request',
@@ -111,9 +111,42 @@ export const REQUEST_TYPE_META: Record<
     colorClass: 'text-slate-700 bg-slate-100 ring-1 ring-slate-200',
     bgSoft: 'bg-slate-600',
     description: 'COE, schedule change, undertime, or general admin memo',
-    routedTo: 'HR & Boss',
+    routedTo: 'HR First → Boss',
   },
 };
+
+/**
+ * Returns true ONLY when initial Stage-1 approval is complete
+ * (HR for HR forms, Accounting for money forms, or both for Overtime)
+ * so the request is ready for final Boss Executive sign-off.
+ */
+export function isReadyForBoss(r: FormRequest): boolean {
+  if (r.boss_status !== 'pending') return false;
+  if (['rejected', 'cancelled'].includes(r.status)) return false;
+  if (r.hr_status !== 'not_required' && !['endorsed', 'approved'].includes(r.hr_status)) {
+    return false;
+  }
+  if (
+    r.accounting_status !== 'not_required' &&
+    !['verified', 'paid'].includes(r.accounting_status)
+  ) {
+    return false;
+  }
+  return true;
+}
+
+/**
+ * Human-readable Stage-1 waiting message when a request hasn't reached Boss yet.
+ */
+export function getBossWaitReason(r: FormRequest): string | null {
+  if (r.boss_status !== 'pending' || ['rejected', 'cancelled'].includes(r.status)) return null;
+  const needHr = r.hr_status === 'pending';
+  const needAcct = r.accounting_status === 'pending';
+  if (needHr && needAcct) return 'Awaiting HR & Accounting approval first';
+  if (needHr) return 'Awaiting HR approval first';
+  if (needAcct) return 'Awaiting Accounting approval first';
+  return null;
+}
 
 export const STATUS_META: Record<
   RequestStatus,
@@ -195,12 +228,94 @@ export const SUBTYPE_OPTIONS: Record<RequestType, { value: string; label: string
   ],
   other: [
     { value: 'undertime', label: 'Undertime Permit' },
-    { value: 'schedule_change', label: 'Work Schedule Adjustment' },
+    { value: 'schedule_change', label: 'Work Schedule / WFH Adjustment' },
     { value: 'coe', label: 'Certificate of Employment (COE)' },
-    { value: 'payslip_copy', label: 'Official Payslip / 2316 Copy' },
+    { value: 'payslip_copy', label: 'Official Payslip / BIR 2316 Copy' },
+    { value: 'supply_it', label: 'IT / Equipment / Office Supply Request' },
     { value: 'general_request', label: 'General HR / Admin Request' },
   ],
 };
+
+export const DOLE_OT_RATES: Record<string, { multiplier: string; note: string }> = {
+  regular_ot: { multiplier: '1.25x', note: 'Ordinary workday overtime (+25%)' },
+  rest_day_ot: { multiplier: '1.30x / 1.69x', note: 'Rest day (1.30x first 8h; 1.69x OT)' },
+  special_holiday_ot: { multiplier: '1.30x / 1.69x', note: 'Special non-working day (+30%)' },
+  regular_holiday_ot: { multiplier: '2.00x / 2.60x', note: 'Regular holiday (200% / 260% OT)' },
+};
+
+export const EXPENSE_COST_CENTERS = [
+  'Hospital Case / OR Support',
+  'Doctor Call & Sales Representation',
+  'Provincial Field Work (Luzon / Visayas / Mindanao)',
+  'Conference, Booth & Marketing Events',
+  'Warehouse, Cold-Chain & Logistics',
+  'Regulatory / FDA & Government',
+  'Office Operations & Admin',
+] as const;
+
+export const EXPENSE_LINE_CATEGORIES = [
+  'Meals & Client Representation',
+  'Fuel, Toll & Parking',
+  'Grab, Taxi & Commute',
+  'Flights & Hotel Accommodation',
+  'Clinical / Surgical Support Supplies',
+  'Office Supplies & Printing',
+  'Mobile Load & Internet',
+  'Other Business Expense',
+] as const;
+
+export const CA_BUDGET_CATEGORIES = [
+  'Hotel & Accommodation',
+  'Airfare & Provincial Transport',
+  'Per Diem & Meals',
+  'Doctor / Client Representation',
+  'Event / Booth / Clinical Supplies',
+  'Fuel, Toll & Local Transfers',
+  'Miscellaneous / Contingency',
+] as const;
+
+export const OB_TRANSPORT_MODES = [
+  'Company Vehicle',
+  'Personal Vehicle (Fuel Reimbursable)',
+  'Grab / Taxi / Ride-Hailing',
+  'Provincial Flight + Airport Transfer',
+  'Public Transport / Bus / Ferry',
+] as const;
+
+export const COE_PURPOSES = [
+  'Visa / Travel Application',
+  'Bank Loan / Financing',
+  'Credit Card Application',
+  'Condo / Housing Lease',
+  'Government / Embassy Requirement',
+  'Personal Record',
+] as const;
+
+export function getPayrollCutoffOptions(): string[] {
+  const now = new Date();
+  const months = [-1, 0, 1].map((offset) => {
+    const d = new Date(now.getFullYear(), now.getMonth() + offset, 1);
+    const label = d.toLocaleDateString('en-PH', { month: 'short', year: 'numeric' });
+    const lastDay = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+    return [`${label} (1–15)`, `${label} (16–${lastDay})`];
+  });
+  return months.flat();
+}
+
+export function getDefaultPayrollCutoff(): string {
+  const now = new Date();
+  const label = now.toLocaleDateString('en-PH', { month: 'short', year: 'numeric' });
+  const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+  return now.getDate() <= 15 ? `${label} (1–15)` : `${label} (16–${lastDay})`;
+}
+
+export function addDaysIso(dateIso: string, days: number): string {
+  if (!dateIso) return '';
+  const d = new Date(`${dateIso}T00:00:00`);
+  if (Number.isNaN(d.getTime())) return '';
+  d.setDate(d.getDate() + days);
+  return d.toISOString().slice(0, 10);
+}
 
 export const PAYMENT_METHOD_LABELS: Record<string, string> = {
   bank_transfer: 'Bank Transfer',

@@ -53,25 +53,88 @@ export interface LeaveBalance {
 }
 
 export interface ExpenseLineItem {
+  expense_date?: string;
   description: string;
+  vendor?: string;
   category: string;
   amount: number;
   receipt_no?: string;
+  is_vat?: boolean;
+}
+
+export interface ObItineraryStop {
+  time: string;
+  hospital_or_client: string;
+  contact_person: string;
+  purpose: string;
+}
+
+export interface CashAdvanceBudgetItem {
+  category: string;
+  description: string;
+  amount: number;
 }
 
 export interface RequestMetadata {
   employee_signature?: string;
   employee_signature_type?: 'drawn' | 'typed';
   signed_at?: string;
+
+  // Leave Application fields
+  leave_pay_type?: 'with_pay' | 'without_pay';
+  return_to_work_date?: string;
   cover_person?: string;
   contact_during_leave?: string;
+  handover_notes?: string;
   half_day?: boolean;
   half_day_period?: 'AM' | 'PM';
+
+  // Overtime Authorization fields (PH DOLE)
+  ot_filing_mode?: 'pre_approval' | 'post_rendered';
+  break_minutes?: number;
+  gross_hours?: number;
+  dole_rate_label?: string;
+  payroll_cutoff?: string;
+  deliverable_ref?: string;
+
+  // Expense Reimbursement fields (PH BIR)
+  cost_center?: string;
+  charge_to_account?: string;
   line_items?: ExpenseLineItem[];
+  vat_total?: number;
+  non_vat_total?: number;
   bank_or_gcash_details?: string;
-  liquidation_date?: string;
+
+  // Official Business / Field Work fields
+  ob_itinerary?: ObItineraryStop[];
+  dtr_attendance_credit?: 'full_day_ob' | 'partial_day_office';
   transportation_mode?: string;
-  expected_outcome?: string;
+  vehicle_plate_no?: string;
+  estimated_field_budget?: number;
+
+  // Cash Advance fields
+  date_needed?: string;
+  liquidation_date?: string;
+  trip_or_event_location?: string;
+  budget_items?: CashAdvanceBudgetItem[];
+  liquidation_undertaking_accepted?: boolean;
+
+  // Dynamic Other HR / Admin Request fields
+  undertime_departure_time?: string;
+  undertime_regular_end?: string;
+  undertime_hours?: number;
+  schedule_work_mode?: 'shift_change' | 'wfh' | 'hybrid';
+  current_schedule?: string;
+  requested_schedule?: string;
+  coe_purpose?: string;
+  coe_with_compensation?: boolean;
+  coe_addressed_to?: string;
+  coe_format?: 'digital_pdf' | 'printed_copy';
+  payroll_doc_type?: string;
+  payroll_coverage_period?: string;
+  supply_category?: string;
+  supply_quantity?: string;
+
   [key: string]: unknown;
 }
 
@@ -117,7 +180,6 @@ export interface FormRequest {
   paid_at: string | null;
   created_at: string;
   updated_at: string;
-  // Joined fields
   employee?: Profile;
   hr_reviewer?: Pick<Profile, 'id' | 'full_name' | 'position' | 'signature_data'> | null;
   boss_reviewer?: Pick<Profile, 'id' | 'full_name' | 'position' | 'signature_data'> | null;

@@ -89,10 +89,12 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [loading, setLoading] = useState(false);
 
+  const userId = user?.id ?? null;
+  const profileId = profile?.id ?? null;
   const isAdmin = Boolean(profile && ['hr', 'boss', 'accounting'].includes(profile.role));
 
   const loadLiveData = useCallback(async () => {
-    if (!user || !profile) {
+    if (!userId || !profileId) {
       setRequests([]);
       setProfiles([]);
       setLeaveBalances([]);
@@ -102,7 +104,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     setLoading(true);
     try {
       const [reqs, memos] = await Promise.all([
-        fetchFormRequests({ scope: isAdmin ? 'all' : 'mine', userId: user.id }),
+        fetchFormRequests({ scope: isAdmin ? 'all' : 'mine', userId }),
         fetchAnnouncements(),
       ]);
       setRequests(reqs);
@@ -129,7 +131,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setLoading(false);
     }
-  }, [user, profile, isAdmin, toast]);
+  }, [userId, profileId, isAdmin, toast]);
 
   useEffect(() => {
     loadLiveData();
@@ -137,7 +139,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
   // Live Supabase Realtime Postgres Subscriptions
   useEffect(() => {
-    if (!user || !profile) return;
+    if (!userId || !profileId) return;
 
     const channel = supabase
       .channel('mediq-forms-realtime')
@@ -167,7 +169,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [user, profile, isAdmin, loadLiveData, refreshProfile, toast]);
+  }, [userId, profileId, isAdmin, loadLiveData, refreshProfile, toast]);
 
   const logoutAll = useCallback(async () => {
     await signOut();

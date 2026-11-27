@@ -311,7 +311,7 @@ export function AuthPage({ portal }: { portal: UserRole }) {
 
           <div className="mb-6">
             <img
-              src="./brand/mediq-logo-dark.png"
+              src="./brand/mediq-logo-official.png"
               alt="MediQ Pharma"
               className="mb-4 h-8 w-auto object-contain lg:hidden"
             />
