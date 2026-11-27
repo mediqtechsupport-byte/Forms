@@ -8,6 +8,7 @@ import { canAccessRolePortal } from './lib/api';
 import { NewRequestModal } from './components/NewRequestModal';
 import { DigitalFormModal } from './components/DigitalFormModal';
 import { AuthPage } from './pages/AuthPage';
+import { AcceptInvitePage } from './pages/AcceptInvitePage';
 import { PortalGatewayPage } from './pages/PortalGatewayPage';
 import { EmployeePortal } from './pages/EmployeePortal';
 import { HrAdminPage } from './pages/HrAdminPage';
@@ -16,7 +17,7 @@ import { AccountingAdminPage } from './pages/AccountingAdminPage';
 import type { FormRequest, RequestType, UserRole } from './types/database';
 
 function WorkspaceApp() {
-  const { loading: authLoading } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const {
     activeProfile: profile,
     requests,
@@ -55,28 +56,42 @@ function WorkspaceApp() {
     );
   }
 
+  // If the user landed from a Supabase email invite link whose redirect landed at Site URL,
+  // send them straight to the branded Acceptance page so they explicitly accept & set their password.
+  const pendingInviteToken =
+    user?.user_metadata?.invite_pending === true &&
+    typeof user?.user_metadata?.invite_token === 'string'
+      ? user.user_metadata.invite_token
+      : null;
+
+  if (pendingInviteToken && location.pathname !== '/accept-invite') {
+    return <Navigate to={`/accept-invite?token=${pendingInviteToken}`} replace />;
+  }
+
+  const activeAuthenticatedProfile = profile && profile.is_active ? profile : null;
+
   const openNewForm = (type: RequestType = 'leave') => {
     setNewFormDefaultType(type);
     setNewFormOpen(true);
   };
 
   const hasAccess = (target: UserRole) =>
-    Boolean(profile && canAccessRolePortal(profile.role, target));
+    Boolean(activeAuthenticatedProfile && canAccessRolePortal(activeAuthenticatedProfile.role, target));
 
   // If logged in as a specific role, lock them strictly to their own portal — visiting another portal's route or login redirects straight back to their authorized portal
   const renderLoginRoute = (target: UserRole) => {
-    if (profile) {
-      return <Navigate to={`/${profile.role}`} replace />;
+    if (activeAuthenticatedProfile) {
+      return <Navigate to={`/${activeAuthenticatedProfile.role}`} replace />;
     }
     return <AuthPage portal={target} />;
   };
 
   const renderProtectedPortal = (target: UserRole, element: ReactElement) => {
-    if (!profile) {
+    if (!activeAuthenticatedProfile) {
       return <Navigate to={`/${target}/login`} replace />;
     }
     if (!hasAccess(target)) {
-      return <Navigate to={`/${profile.role}`} replace />;
+      return <Navigate to={`/${activeAuthenticatedProfile.role}`} replace />;
     }
     return element;
   };
@@ -86,6 +101,9 @@ function WorkspaceApp() {
       <Routes>
         {/* Main Entry Link: Choose Which Portal to Open */}
         <Route path="/" element={<PortalGatewayPage />} />
+
+        {/* Branded Employee / Staff Invitation Acceptance Page */}
+        <Route path="/accept-invite" element={<AcceptInvitePage />} />
 
         {/* Dedicated Branded Login Page for Each Separate Portal */}
         <Route path="/employee/login" element={renderLoginRoute('employee')} />
@@ -141,10 +159,18 @@ function WorkspaceApp() {
           )}
         />
 
-        <Route path="*" element={<Navigate to={profile ? `/${profile.role}` : '/'} replace />} />
+        <Route
+          path="*"
+          element={
+            <Navigate
+              to={activeAuthenticatedProfile ? `/${activeAuthenticatedProfile.role}` : '/'}
+              replace
+            />
+          }
+        />
       </Routes>
 
-      {profile && (
+      {activeAuthenticatedProfile && (
         <>
           <NewRequestModal
             open={newFormOpen}

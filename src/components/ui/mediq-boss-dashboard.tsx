@@ -40,6 +40,7 @@ import {
   Moon,
   Palette,
   PenTool,
+  Printer,
   Save,
   Settings,
   ShieldCheck,
@@ -64,6 +65,7 @@ import {
   isReadyForBoss,
 } from "@/lib/constants";
 import { CreateAccountCard } from "@/components/CreateAccountCard";
+import { EmployeeHistoryExportModal } from "@/components/EmployeeHistoryExportModal";
 import { SignaturePad } from "@/components/SignaturePad";
 import { RequestTypeBadge, RequestTypeIcon, RoleBadge } from "@/components/StatusBadges";
 import { EmployeeFormsDatatable } from "@/components/ui/employee-forms-datatable";
@@ -1897,7 +1899,14 @@ export function MediqBossDashboard({
   const [readIds, setReadIds] = useState<Set<string>>(() => new Set());
   const [quickApprovingId, setQuickApprovingId] = useState<string | null>(null);
   const [updatingRoleId, setUpdatingRoleId] = useState<string | null>(null);
+  const [exportOpen, setExportOpen] = useState(false);
+  const [exportEmpId, setExportEmpId] = useState<string | null>(null);
   const [toastMsg, setToastMsg] = useState<{ id: number; msg: string } | null>(null);
+
+  const openHistoryExport = (empId: string | null = null) => {
+    setExportEmpId(empId);
+    setExportOpen(true);
+  };
 
   const bellRef = useRef<HTMLButtonElement | null>(null);
 
@@ -2632,10 +2641,13 @@ export function MediqBossDashboard({
                           <div>
                             <CardTitle>Company Digital Forms Audit Trail</CardTitle>
                             <p className="mt-0.5 text-xs text-muted-foreground">
-                              Inspect any employee submission, approve pending slips in one click,
-                              or export CSV.
+                              Inspect any employee submission, approve cleared slips in one click,
+                              or export &amp; save history to the database.
                             </p>
                           </div>
+                          <Chip icon={Printer} onClick={() => openHistoryExport(null)}>
+                            Export &amp; Print History
+                          </Chip>
                         </div>
                         <EmployeeFormsDatatable
                           requests={searchedRequests}
@@ -2716,17 +2728,24 @@ export function MediqBossDashboard({
                     <>
                       <ViewHead
                         title="Approval History"
-                        sub="Once approved by the Boss, forms move here permanently as read-only records — locked against edits or deletion by anyone."
+                        sub="Once approved by the Boss, forms move here permanently as read-only records — export any employee's history to print PDF and archive in the database."
                         id="fy-h-all"
                       >
                         <Magnetic
                           className="fy-primary"
+                          onClick={() => openHistoryExport(null)}
+                        >
+                          <Printer className="h-4 w-4" />
+                          Export &amp; Print History
+                        </Magnetic>
+                        <Magnetic
+                          className="fy-ghost"
                           onClick={() => {
                             setQueueFilter("all");
                             go("approvals");
                           }}
                         >
-                          <ClipboardCheck className="h-5 w-5" />
+                          <ClipboardCheck className="h-4 w-4" />
                           Pending ({awaitingBoss.length})
                         </Magnetic>
                       </ViewHead>
@@ -2800,7 +2819,57 @@ export function MediqBossDashboard({
                       />
 
                       <div className="space-y-5">
-                        <div className="rounded-[20px] bg-white text-slate-900 shadow-[var(--fy-shadow)]">
+                        {/* Authorized Boss Executive Accounts Summary */}
+                        <FyCard label="Authorized Boss Executive Emails">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <div>
+                              <CardTitle>
+                                Authorized Boss Executive Accounts (
+                                {profiles.filter((p) => p.role === "boss" && p.is_active).length})
+                              </CardTitle>
+                              <p className="mt-0.5 text-xs text-muted-foreground">
+                                Both Co-Executives (e.g., Boss &amp; Wife) can have separate login
+                                emails and their own saved E-Signatures. Whoever approves signs the
+                                slip and permanently locks it in History.
+                              </p>
+                            </div>
+                          </div>
+                          <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                            {profiles
+                              .filter((p) => p.role === "boss")
+                              .map((bossAcc) => (
+                                <div
+                                  key={bossAcc.id}
+                                  className="flex items-center gap-3 rounded-2xl border border-border bg-muted/70 px-4 py-3"
+                                >
+                                  <AvatarCircle
+                                    name={bossAcc.full_name}
+                                    tint="#e6dac6"
+                                    size={38}
+                                  />
+                                  <div className="min-w-0 flex-1">
+                                    <p className="truncate text-sm font-semibold text-foreground">
+                                      {bossAcc.full_name}
+                                    </p>
+                                    <p className="truncate text-xs text-muted-foreground">
+                                      {bossAcc.email} · {bossAcc.employee_code}
+                                    </p>
+                                  </div>
+                                  <span
+                                    className={`flex-none rounded-full px-2.5 py-0.5 text-[10.5px] font-bold ${
+                                      bossAcc.is_active
+                                        ? "bg-[var(--fy-soft)] text-[var(--fy-text)]"
+                                        : "bg-[var(--fy-rose-bg)] text-[var(--fy-rose)]"
+                                    }`}
+                                  >
+                                    {bossAcc.is_active ? "Active Boss" : "Disabled"}
+                                  </span>
+                                </div>
+                              ))}
+                          </div>
+                        </FyCard>
+
+                        <div className="rounded-[20px] shadow-[var(--fy-shadow)]">
                           <CreateAccountCard allowBossRole />
                         </div>
 
@@ -2871,18 +2940,28 @@ export function MediqBossDashboard({
                                       </div>
                                     </td>
                                     <td className="px-5 py-3.5 text-right">
-                                      <button
-                                        type="button"
-                                        disabled={updatingRoleId === emp.id}
-                                        onClick={() => handleToggleActive(emp)}
-                                        className={`cursor-pointer rounded-full px-3 py-1 text-xs font-semibold transition ${
-                                          emp.is_active
-                                            ? "bg-[var(--fy-soft)] text-[var(--fy-text)] hover:bg-[var(--fy-rose-bg)] hover:text-[var(--fy-rose)]"
-                                            : "bg-[var(--fy-rose-bg)] text-[var(--fy-rose)] hover:bg-[var(--fy-soft)] hover:text-[var(--fy-text)]"
-                                        }`}
-                                      >
-                                        {emp.is_active ? "Active" : "Disabled"}
-                                      </button>
+                                      <div className="inline-flex flex-wrap items-center justify-end gap-2">
+                                        <button
+                                          type="button"
+                                          onClick={() => openHistoryExport(emp.id)}
+                                          className="fy-chip fy-focus inline-flex cursor-pointer items-center gap-1 rounded-full px-3 py-1 text-xs font-semibold"
+                                        >
+                                          <Printer className="h-3 w-3" />
+                                          Export History
+                                        </button>
+                                        <button
+                                          type="button"
+                                          disabled={updatingRoleId === emp.id}
+                                          onClick={() => handleToggleActive(emp)}
+                                          className={`cursor-pointer rounded-full px-3 py-1 text-xs font-semibold transition ${
+                                            emp.is_active
+                                              ? "bg-[var(--fy-soft)] text-[var(--fy-text)] hover:bg-[var(--fy-rose-bg)] hover:text-[var(--fy-rose)]"
+                                              : "bg-[var(--fy-rose-bg)] text-[var(--fy-rose)] hover:bg-[var(--fy-soft)] hover:text-[var(--fy-text)]"
+                                          }`}
+                                        >
+                                          {emp.is_active ? "Active" : "Disabled"}
+                                        </button>
+                                      </div>
                                     </td>
                                   </tr>
                                 ))}
@@ -2921,6 +3000,15 @@ export function MediqBossDashboard({
           onGo={go}
           pendingCount={awaitingBoss.length}
           onSignOut={() => void signOut()}
+        />
+
+        <EmployeeHistoryExportModal
+          open={exportOpen}
+          onClose={() => setExportOpen(false)}
+          portalRole="boss"
+          requests={requests}
+          profiles={profiles}
+          initialEmployeeId={exportEmpId}
         />
 
         <div

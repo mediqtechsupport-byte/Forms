@@ -43,6 +43,7 @@ import {
   PenTool,
   Pin,
   Plus,
+  Printer,
   Save,
   Settings,
   Sun,
@@ -62,6 +63,7 @@ import {
   formatDate,
 } from "@/lib/constants";
 import { CreateAccountCard } from "@/components/CreateAccountCard";
+import { EmployeeHistoryExportModal } from "@/components/EmployeeHistoryExportModal";
 import { SignaturePad } from "@/components/SignaturePad";
 import { RequestTypeBadge, RequestTypeIcon, RoleBadge } from "@/components/StatusBadges";
 import { EmployeeFormsDatatable } from "@/components/ui/employee-forms-datatable";
@@ -1906,7 +1908,14 @@ export function MediqHrDashboard({
   const [memoCategory, setMemoCategory] = useState<Announcement["category"]>("hr_policy");
   const [memoPinned, setMemoPinned] = useState(false);
   const [postingMemo, setPostingMemo] = useState(false);
+  const [exportOpen, setExportOpen] = useState(false);
+  const [exportEmpId, setExportEmpId] = useState<string | null>(null);
   const [toastMsg, setToastMsg] = useState<{ id: number; msg: string } | null>(null);
+
+  const openHistoryExport = (empId: string | null = null) => {
+    setExportEmpId(empId);
+    setExportOpen(true);
+  };
 
   const bellRef = useRef<HTMLButtonElement | null>(null);
 
@@ -2737,6 +2746,9 @@ export function MediqHrDashboard({
                               live with Supabase.
                             </p>
                           </div>
+                          <Chip icon={Printer} onClick={() => openHistoryExport(null)}>
+                            Export &amp; Print History
+                          </Chip>
                         </div>
                         <EmployeeFormsDatatable
                           requests={searchedHrRequests}
@@ -2759,10 +2771,17 @@ export function MediqHrDashboard({
                     <>
                       <ViewHead
                         title="HR Forms Queue"
-                        sub="Endorse incoming Leave, Overtime, Official Business, and HR/Admin requests and export CSV."
+                        sub="Approve & forward Leave, Overtime, Official Business, and HR/Admin requests to Boss — or export full employee history to print & archive in the database."
                         id="fy-h-queue"
                       >
-                        <Magnetic className="fy-primary" onClick={() => go("employees")}>
+                        <Magnetic
+                          className="fy-primary"
+                          onClick={() => openHistoryExport(null)}
+                        >
+                          <Printer className="h-4 w-4" />
+                          Export &amp; Print History
+                        </Magnetic>
+                        <Magnetic className="fy-ghost" onClick={() => go("employees")}>
                           <Users className="h-4 w-4" />
                           Staff &amp; Credits
                         </Magnetic>
@@ -2840,7 +2859,7 @@ export function MediqHrDashboard({
                       />
 
                       <div className="space-y-5">
-                        <div className="rounded-[20px] bg-white text-slate-900 shadow-[var(--fy-shadow)]">
+                        <div className="rounded-[20px]">
                           <CreateAccountCard allowBossRole={currentUser?.role === "boss"} />
                         </div>
 
@@ -3067,13 +3086,23 @@ export function MediqHrDashboard({
                                             </button>
                                           </div>
                                         ) : (
-                                          <button
-                                            type="button"
-                                            onClick={() => startEditBalance(emp.id)}
-                                            className="fy-chip fy-focus cursor-pointer rounded-full px-3 py-1.5 text-xs font-semibold"
-                                          >
-                                            Edit Credits
-                                          </button>
+                                          <div className="inline-flex flex-wrap items-center justify-end gap-1.5">
+                                            <button
+                                              type="button"
+                                              onClick={() => openHistoryExport(emp.id)}
+                                              className="fy-chip fy-focus inline-flex cursor-pointer items-center gap-1 rounded-full px-3 py-1.5 text-xs font-semibold"
+                                            >
+                                              <Printer className="h-3 w-3" />
+                                              Export History
+                                            </button>
+                                            <button
+                                              type="button"
+                                              onClick={() => startEditBalance(emp.id)}
+                                              className="fy-chip fy-focus cursor-pointer rounded-full px-3 py-1.5 text-xs font-semibold"
+                                            >
+                                              Edit Credits
+                                            </button>
+                                          </div>
                                         )}
                                       </td>
                                     </tr>
@@ -3258,6 +3287,15 @@ export function MediqHrDashboard({
           onGo={go}
           pendingHrCount={pendingHrList.length}
           onSignOut={() => void signOut()}
+        />
+
+        <EmployeeHistoryExportModal
+          open={exportOpen}
+          onClose={() => setExportOpen(false)}
+          portalRole="hr"
+          requests={requests}
+          profiles={profiles}
+          initialEmployeeId={exportEmpId}
         />
 
         <div

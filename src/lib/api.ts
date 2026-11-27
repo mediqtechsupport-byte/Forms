@@ -2,6 +2,8 @@ import { supabase } from './supabase';
 import type {
   Announcement,
   FormRequest,
+  HistoryExportArchive,
+  HistoryExportSnapshotRow,
   LeaveBalance,
   PaymentMethod,
   Profile,
@@ -9,6 +11,7 @@ import type {
   RequestAttachment,
   RequestMetadata,
   RequestType,
+  StaffInvitation,
   UserRole,
 } from '../types/database';
 
@@ -341,6 +344,181 @@ export async function deleteAnnouncement(id: number): Promise<void> {
   if (error) throw error;
 }
 
+export async function fetchHistoryExportArchives(): Promise<HistoryExportArchive[]> {
+  const { data, error } = await supabase
+    .from('history_export_archives')
+    .select('*')
+    .order('created_at', { ascending: false })
+    .limit(50);
+  if (error) throw error;
+  return (data ?? []) as unknown as HistoryExportArchive[];
+}
+
+export interface SaveHistoryExportArchiveInput {
+  exported_by: string;
+  exported_by_name: string;
+  exported_by_role: 'boss' | 'hr';
+  target_employee_id: string | null;
+  target_employee_name: string;
+  target_employee_code: string | null;
+  report_title: string;
+  filter_summary: {
+    statusFilter?: string;
+    typeFilter?: string;
+    dateFrom?: string;
+    dateTo?: string;
+  };
+  record_count: number;
+  total_leave_days: number;
+  total_ot_hours: number;
+  total_amount: number;
+  snapshot_rows: HistoryExportSnapshotRow[];
+  notes?: string | null;
+}
+
+export async function saveHistoryExportArchive(
+  input: SaveHistoryExportArchiveInput
+): Promise<HistoryExportArchive> {
+  const { data, error } = await supabase
+    .from('history_export_archives')
+    .insert({
+      archive_code: '',
+      exported_by: input.exported_by,
+      exported_by_name: input.exported_by_name,
+      exported_by_role: input.exported_by_role,
+      target_employee_id: input.target_employee_id,
+      target_employee_name: input.target_employee_name,
+      target_employee_code: input.target_employee_code,
+      report_title: input.report_title,
+      filter_summary: input.filter_summary,
+      record_count: input.record_count,
+      total_leave_days: input.total_leave_days,
+      total_ot_hours: input.total_ot_hours,
+      total_amount: input.total_amount,
+      snapshot_rows: input.snapshot_rows,
+      notes: input.notes?.trim() || null,
+    })
+    .select('*')
+    .single();
+  if (error) throw error;
+  return data as unknown as HistoryExportArchive;
+}
+
 export function canAccessRolePortal(userRole: UserRole, targetPortal: UserRole): boolean {
   return userRole === targetPortal;
+}
+
+/* -------------------------------------------------------------------------- */
+/*                     Staff Email Invitations & Acceptance                   */
+/* -------------------------------------------------------------------------- */
+
+async function extractFnError(data: unknown, error: unknown, fallback: string): Promise<string> {
+  if (data && typeof data === 'object' && 'error' in data && typeof (data as { error?: unknown }).error === 'string') {
+    return (data as { error: string }).error;
+  }
+  if (error && typeof error === 'object' && 'context' in error) {
+    const ctx = (error as { context?: unknown }).context;
+    if (ctx instanceof Response) {
+      try {
+        const parsed = await ctx.json();
+        if (parsed && typeof parsed.error === 'string') return parsed.error;
+      } catch {
+        // ignore JSON parse issues
+      }
+    }
+  }
+  if (error instanceof Error && error.message) return error.message;
+  return fallback;
+}
+
+export async function fetchStaffInvitations(): Promise<StaffInvitation[]> {
+  const { data, error } = await supabase
+    .from('staff_invitations')
+    .select('*')
+    .order('created_at', { ascending: false })
+    .limit(50);
+  if (error) throw error;
+  return (data ?? []) as StaffInvitation[];
+}
+
+export async function sendStaffInvite(input: {
+  full_name: string;
+  email: string;
+  department: string;
+  position: string;
+  role: UserRole;
+  portal_base_url: string;
+}): Promise<{
+  invitation: StaffInvitation;
+  accept_url: string;
+  email_sent: boolean;
+  email_delivery_note: string;
+}> {
+  const { data, error } = await supabase.functions.invoke('send-staff-invite', {
+    body: { action: 'send', ...input },
+  });
+  if (error || (data && typeof data === 'object' && 'error' in data)) {
+    throw new Error(await extractFnError(data, error, 'Unable to send staff invitation.'));
+  }
+  return data as {
+    invitation: StaffInvitation;
+    accept_url: string;
+    email_sent: boolean;
+    email_delivery_note: string;
+  };
+}
+
+export async function revokeStaffInvite(invitationId: string): Promise<void> {
+  const { data, error } = await supabase.functions.invoke('send-staff-invite', {
+    body: { action: 'revoke', invitation_id: invitationId },
+  });
+  if (error || (data && typeof data === 'object' && 'error' in data)) {
+    throw new Error(await extractFnError(data, error, 'Unable to revoke invitation.'));
+  }
+}
+
+export interface InvitePreview {
+  email: string;
+  full_name: string;
+  department: string;
+  position: string;
+  role: UserRole;
+  invited_by_name: string;
+  invited_by_role: 'boss' | 'hr';
+  status: StaffInvitation['status'];
+  expires_at: string;
+  created_at: string;
+}
+
+export async function lookupStaffInvite(token: string): Promise<InvitePreview> {
+  const { data, error } = await supabase.functions.invoke('accept-staff-invite', {
+    body: { mode: 'lookup', token },
+  });
+  if (error || (data && typeof data === 'object' && 'error' in data)) {
+    throw new Error(await extractFnError(data, error, 'Invitation not found or expired.'));
+  }
+  return (data as { invitation: InvitePreview }).invitation;
+}
+
+export async function acceptStaffInvite(params: {
+  token: string;
+  password: string;
+  full_name: string;
+}): Promise<{ ok: boolean; email: string; role: UserRole; full_name: string }> {
+  const { data, error } = await supabase.functions.invoke('accept-staff-invite', {
+    body: { mode: 'accept', ...params },
+  });
+  if (error || (data && typeof data === 'object' && 'error' in data)) {
+    throw new Error(await extractFnError(data, error, 'Unable to accept invitation.'));
+  }
+  return data as { ok: boolean; email: string; role: UserRole; full_name: string };
+}
+
+export async function declineStaffInvite(token: string): Promise<void> {
+  const { data, error } = await supabase.functions.invoke('accept-staff-invite', {
+    body: { mode: 'decline', token },
+  });
+  if (error || (data && typeof data === 'object' && 'error' in data)) {
+    throw new Error(await extractFnError(data, error, 'Unable to decline invitation.'));
+  }
 }

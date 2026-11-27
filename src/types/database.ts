@@ -219,3 +219,85 @@ export interface Announcement {
   updated_at: string;
   author?: Pick<Profile, 'id' | 'full_name' | 'role'> | null;
 }
+
+export interface HistoryExportSnapshotRow {
+  reference_no: string;
+  created_at: string;
+  employee_name: string;
+  employee_code: string;
+  department: string;
+  request_type: RequestType;
+  request_type_label: string;
+  subtype_label: string;
+  title: string;
+  description: string;
+  status: RequestStatus;
+  priority: 'normal' | 'urgent';
+  start_date: string | null;
+  end_date: string | null;
+  total_days: number | null;
+  total_hours: number | null;
+  amount: number | null;
+  receipt_or_number: string | null;
+  disbursement_reference: string | null;
+  hr_status: HrStatus;
+  hr_reviewer_name: string | null;
+  hr_reviewed_at: string | null;
+  hr_remarks: string | null;
+  accounting_status: AccountingStatus;
+  accounting_reviewer_name: string | null;
+  accounting_reviewed_at: string | null;
+  accounting_remarks: string | null;
+  boss_status: BossStatus;
+  boss_reviewer_name: string | null;
+  boss_reviewed_at: string | null;
+  boss_remarks: string | null;
+}
+
+export interface HistoryExportArchive {
+  id: string;
+  archive_code: string;
+  exported_by: string;
+  exported_by_name: string;
+  exported_by_role: 'boss' | 'hr';
+  target_employee_id: string | null;
+  target_employee_name: string;
+  target_employee_code: string | null;
+  report_title: string;
+  filter_summary: {
+    statusFilter?: string;
+    typeFilter?: string;
+    dateFrom?: string;
+    dateTo?: string;
+  };
+  record_count: number;
+  total_leave_days: number;
+  total_ot_hours: number;
+  total_amount: number;
+  snapshot_rows: HistoryExportSnapshotRow[];
+  notes: string | null;
+  created_at: string;
+}
+
+export type StaffInvitationStatus = 'pending' | 'accepted' | 'declined' | 'revoked' | 'expired';
+
+export interface StaffInvitation {
+  id: string;
+  invite_token: string;
+  email: string;
+  full_name: string;
+  department: string;
+  position: string;
+  role: UserRole;
+  status: StaffInvitationStatus;
+  invited_by: string;
+  invited_by_name: string;
+  invited_by_role: 'boss' | 'hr';
+  invited_auth_user_id: string | null;
+  email_sent: boolean;
+  email_delivery_note: string | null;
+  accepted_user_id: string | null;
+  accepted_at: string | null;
+  expires_at: string;
+  created_at: string;
+}
